@@ -63,7 +63,7 @@ class Astar():
 
         self.openset = PriorityQueue() # priority queue
         self.closedset = {}
-        #print("start and end", start, goal)
+        print("start and end", start, goal)
         
     def map_to_grid(self,node_position):
         """get into z,x,y"""
@@ -91,13 +91,13 @@ class Astar():
 
     def is_move_valid(self, node_position):
         """check if move made is valid if so then return True"""     
-        if (node_position[0] > (self.grid_x + 1) or 
+        if (node_position[0] > (self.grid_x - 1) or 
             (node_position[0] <= 0)):
             return False
-        if (node_position[1] > (self.grid_y + 1) or 
+        if (node_position[1] > (self.grid_y - 1) or 
             (node_position[1] <= 0)):
             return False
-        if node_position[2] > self.height_boundary:
+        if node_position[2] > self.height_boundary-1:
             #print(node_position)
             return False
         if node_position[2] < self.ground_boundary:
@@ -155,7 +155,7 @@ class Astar():
                   [-ss, -ss, 0], #go back left
                   [ 0, ss , ss], #go up z 
                   [ 0, ss, -ss]] # go down z
-        
+        print("starting")
         self.init_node()
         count = 0 
 
@@ -164,7 +164,7 @@ class Astar():
         #while len(self.openset) > 0:
             count = count + 1
             #print(count)
-            if count >= 5000:
+            if count >= 10000:
                 print("iterations too much")
                 return self.closedset
             
@@ -178,7 +178,7 @@ class Astar():
                
             #check if we hit the goal 
             if current_node.position == self.end_node.position:
-                #print("Goal reached", current_node.position)
+                print("Goal reached", current_node.position)
                 path = self.return_path(current_node, self.grid)
                 #print("success!", count)
                 return path
@@ -196,16 +196,21 @@ class Astar():
                     continue
         
                 # Make sure walkable terrain
-                if node_position in self.obst_dict:
+                # if node_position in self.obst_dict:
+                #     continue
+                # print(node_position)
+                if self.grid[node_position[2], node_position[0], node_position[1]] == 1:
                     continue
-                #if curren
+                
                 
                 #check collision bubble here
                 dist, obst_index = self.find_closest_obstacle(self.obstacle_list, node_position)
                 #print("checking", self.obstacle_list[obst_index])
-                if self.is_collision(dist):
-                    #print("collision")
-                    continue
+                
+
+                # if self.is_collision(dist):
+                #     #print("collision")
+                #     continue
                 
                 #create new node
                 new_node = Node(current_node, node_position)
@@ -237,7 +242,7 @@ class Astar():
                 else:
                     #print(current_node.g)
                     child.g = current_node.g + 1
-                    dynamic_weight = 15
+                    dynamic_weight = 1.5
                     child.h = self.compute_euclidean(child.position, self.end_node)
                     child.f = child.g + (child.h *penalty*dynamic_weight)
                 

@@ -258,8 +258,9 @@ class Graph():
             inner_sets = []
             for edge_side, location in cluster_vals.mapped_entrances.items():
                 inner_connections.append(location)
+                
+                #get all permuations for nodes on the same side
                 same_side_combos = list(combinations(location, 2))
-            
                 for same_side in same_side_combos:
                     inner_sets.append(same_side)
             
@@ -273,14 +274,22 @@ class Graph():
             if idx == 1:
                 return intra_connections_list, inner_sets
             
-            #add all the intra nodes between the adjacent sides
+            #add all the intra nodes between the adjacent nodes need to do Astar to find distance
             for intra_connections in intra_connections_list:
-                print("intra connections", intra_connections)
-                
+                #print("intra connections", intra_connections)
                 intra_node1 = AbstractNode(intra_connections[0], cluster_loc)
                 intra_node2 = AbstractNode(intra_connections[1], cluster_loc)
+                
+                # if intra_node1.location != intra_node2.location:
+                #     astar = Astar(self.map)
+                    #astar = Astar(grid, obst_dict, obs_list, start, goal, height, ground)
+        #         astar = Astar(grid, annotated_map._static_obstacles, obstacle_coords, coordinate[0],
+        #                       coordinate[1], z_size, 0)
                                
-                self.__add_edge(intra_node1, intra_node2, "INTRA")        
+                self.__add_edge(intra_node1, intra_node2, "INTRA")
+                
+    def __compute_intra_node_distance(self):
+        """compute the intra node distances for each node"""
     
     def __add_edge(self, node1, node2, node_type):
         """makes edge between two nodes"""
@@ -608,9 +617,9 @@ def test_permuations(graph):
     return intra_connections
 
 if __name__=='__main__':
-    x_size = 10
-    y_size = 10
-    z_size = 1
+    x_size = 50
+    y_size = 50
+    z_size = 2
     
     z_obs_height = 0
     num_clusters = 4
@@ -633,16 +642,27 @@ if __name__=='__main__':
     graph = Graph(annotated_map)
     graph.build_graph()    
     connections = graph.build_intra_edges()
-            
-    # grid = annotated_map.get_grid()
-    # obstacle_coords = get_obstacle_coordinates(random_obstacles)
-    # path_list = []
-    # for coordinate in test:
-    #     if coordinate[0] != coordinate[1]:
-    #         astar = Astar(grid, annotated_map._static_obstacles, obstacle_coords, coordinate[0],
-    #                       coordinate[1], z_size, 0)
-    #         path = astar.main()
-    #         path_list.append(path)
+    
+    ####---- Testing the Astar direction finding
+    """I should be using the cluster coordinate for finding the area 
+    Astar is searching beyond the bounds because I am using the global map"""
+    #grid = annotated_map.get_grid()
+    obstacle_coords = get_obstacle_coordinates(random_obstacles)
+    path_list = []
+    test = graph.graph
+    vals = test['[0, 24, 0]']
+    start_coordinate = [0,24,0]
+    grid = annotated_map.cluster_dict[str([0,0])].cluster_space
+    path_list = []
+    for val in vals:
+        if val.node_type == "INTRA":
+            print(val.location, val.node_type)
+            # astar = Astar(grid, annotated_map._static_obstacles, obstacle_coords, start_coordinate,
+            #               val.location, z_size, 0)
+            astar = Astar(grid, annotated_map._static_obstacles, obstacle_coords, start_coordinate,
+                          val.location, z_size, 0)
+            path = astar.main()
+            path_list.append(path)
 
     #def Astar__init__(self, grid, obs_list,start, goal, height, ground)
     
