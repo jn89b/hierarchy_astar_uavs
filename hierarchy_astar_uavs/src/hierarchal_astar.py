@@ -617,8 +617,8 @@ def test_permuations(graph):
     return intra_connections
 
 if __name__=='__main__':
-    x_size = 50
-    y_size = 50
+    x_size = 10
+    y_size = 10
     z_size = 2
     
     z_obs_height = 0
@@ -650,8 +650,8 @@ if __name__=='__main__':
     obstacle_coords = get_obstacle_coordinates(random_obstacles)
     path_list = []
     test = graph.graph
-    vals = test['[0, 24, 0]']
-    start_coordinate = [0,24,0]
+    vals = test['[1, 4, 0]']
+    start_coordinate = [1,4,0]
     grid = annotated_map.cluster_dict[str([0,0])].cluster_space
     path_list = []
     for val in vals:
@@ -659,6 +659,7 @@ if __name__=='__main__':
             print(val.location, val.node_type)
             # astar = Astar(grid, annotated_map._static_obstacles, obstacle_coords, start_coordinate,
             #               val.location, z_size, 0)
+            gc.collect()
             astar = Astar(grid, annotated_map._static_obstacles, obstacle_coords, start_coordinate,
                           val.location, z_size, 0)
             path = astar.main()

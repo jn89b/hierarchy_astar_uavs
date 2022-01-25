@@ -64,6 +64,9 @@ class Astar():
         self.openset = PriorityQueue() # priority queue
         self.closedset = {}
         print("start and end", start, goal)
+
+    def add_offset():
+        """this is stupid add offset to grid"""
         
     def map_to_grid(self,node_position):
         """get into z,x,y"""
@@ -85,22 +88,29 @@ class Astar():
         start_node = Node(None,tuple(self.start))
         start_node.g = start_node.h = start_node.f = 0
         self.openset.put((start_node.f, start_node))
-        #self.openset.append(start_node)
         self.end_node = Node(None, tuple(self.goal))
         self.end_node.g = self.end_node.h = self.end_node.f = 0
 
     def is_move_valid(self, node_position):
         """check if move made is valid if so then return True"""     
-        if (node_position[0] > (self.grid_x - 1) or 
-            (node_position[0] <= 0)):
+        print(node_position)
+        if (node_position[0] > (self.grid_x-1) or 
+            (node_position[0] < 0)):
+            print("x")
             return False
-        if (node_position[1] > (self.grid_y - 1) or 
-            (node_position[1] <= 0)):
+        
+        if (node_position[1] > (self.grid_y-1) or 
+            (node_position[1] < 0)):
+            print("y")
             return False
+        
         if node_position[2] > self.height_boundary-1:
             #print(node_position)
+            print("z")
             return False
+        
         if node_position[2] < self.ground_boundary:
+            print("ground")
             return False
         
     
@@ -161,17 +171,15 @@ class Astar():
 
         """main implementation"""
         while not self.openset.empty():
-        #while len(self.openset) > 0:
-            count = count + 1
-            #print(count)
-            if count >= 10000:
-                print("iterations too much")
-                return self.closedset
-            
             if self.openset.empty():
                 print("No more moves")
                 return self.closedset
             
+            count = count + 1
+            if count >= 10000:
+                print("iterations too much")
+                return self.closedset
+
             #pop node off from priority queue and add into closedset
             cost,current_node = self.openset.get()
             self.closedset[current_node.position] = current_node
@@ -191,11 +199,12 @@ class Astar():
                                  current_node.position[1] + new_position[1],\
                                      current_node.position[2] + new_position[2])
 
-                # Make sure within range (check if within maze boundary)
+                #CHECK WITHIN BOUNDS
                 if self.is_move_valid(node_position) == False:
+                    #print("out of bounds", node_position)
                     continue
         
-                # Make sure walkable terrain
+                #CHECK IF WALKABLE
                 # if node_position in self.obst_dict:
                 #     continue
                 # print(node_position)
@@ -203,14 +212,12 @@ class Astar():
                     continue
                 
                 
-                #check collision bubble here
+                #COLLISION CHECK
                 dist, obst_index = self.find_closest_obstacle(self.obstacle_list, node_position)
                 #print("checking", self.obstacle_list[obst_index])
-                
-
-                # if self.is_collision(dist):
-                #     #print("collision")
-                #     continue
+                if self.is_collision(dist):
+                    #print("collision")
+                    continue
                 
                 #create new node
                 new_node = Node(current_node, node_position)
@@ -242,7 +249,7 @@ class Astar():
                 else:
                     #print(current_node.g)
                     child.g = current_node.g + 1
-                    dynamic_weight = 1.5
+                    dynamic_weight = 1.0
                     child.h = self.compute_euclidean(child.position, self.end_node)
                     child.f = child.g + (child.h *penalty*dynamic_weight)
                 
