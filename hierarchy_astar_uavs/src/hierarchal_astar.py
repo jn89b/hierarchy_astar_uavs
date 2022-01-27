@@ -11,11 +11,9 @@ Grids have a component of a graph
 from __future__ import print_function
 import numpy as np
 import math as m
-import matplotlib.pyplot as plt
 import random
 
 from Astar import Astar, AstarGraph
-from mpl_toolkits.mplot3d import axes3d, Axes3D 
 import itertools
 from itertools import combinations, permutations, product
 import time
@@ -272,8 +270,8 @@ class Graph():
                                      , product(inner_connections[1], inner_connections[0])):
                 inner_sets.append(r)
                 
-            #intra_connections_list = inner_sets
-            intra_connections_list = self.__remove_coords_diff_depth(inner_sets)
+            #intra_connections_list = self.__remove_coords_diff_depth(inner_sets)
+            intra_connections_list = inner_sets
             
             #this is a test to reduce the grid
             if idx == 4:
@@ -286,43 +284,49 @@ class Graph():
                 
                 config_space = self.map.cluster_dict[str(cluster_loc)].cluster_space
                 config_bounds = self.map.cluster_dict[str(cluster_loc)].limits
-                distance = self.__search_for_distance(intra_node1, intra_node2, config_space, config_bounds)
+                distance = self.__search_for_distance(intra_node1, intra_node2, config_space, config_bounds, False)
                 self.__add_edge(intra_node1, intra_node2, distance, 1, "INTRA")
                                 
-    def __search_for_distance(self, intra_node1, intra_node2, cluster_space, config_bounds):
-        """search for distance between two intra nodes using Astar"""
+    def __search_for_distance(self, intra_node1, intra_node2, cluster_space, config_bounds, get_path):
+        """search for distance between two intra nodes using Astar
+        this is due for a refactoring
+        """
         obstacle_coords = self.map.get_obstacle_list()
         
         #this is stupid I just need to apply an offset to make to the node positions
-        x_bounds = [config_bounds[0][0], config_bounds[1][0]]
+        x_bounds = [config_bounds[0][0], config_bounds[0][1]]
         x_offset = abs(x_bounds[0])
     
-        y_bounds = [config_bounds[0][1], config_bounds[1][1]]
+        y_bounds = [config_bounds[1][0], config_bounds[1][1]]
         y_offset = abs(y_bounds[0])
         
         #print("Starting and goal point is", intra_node1.location, intra_node2.location)
         start_position = [abs(intra_node1.location[0] - x_offset),
                           abs(intra_node1.location[1] - y_offset), intra_node1.location[2]]
         
-        goal_position = [abs(intra_node2.location[0] - x_bounds[0]),
-                          abs(intra_node2.location[1] - y_bounds[0]), intra_node2.location[2]]
-                          
+        goal_position = [abs(intra_node2.location[0] - x_offset),
+                          abs(intra_node2.location[1] - y_offset), intra_node2.location[2]]
+        
+        #print(x_bounds, y_bounds)
         #added a garbage collection to remove clutter since this function will be used 
         gc.collect()
         astar = Astar(cluster_space, obstacle_coords, start_position,
-                      goal_position, self.map.z_size, 0)
+                      goal_position, self.map.z_size, 10)
     
         path_list = astar.main()
         #print("path list is", path_list[0])
         
-        #return a stupid high value if I cant find a path otherwise return the actual one
-        if path_list is None:
-            return 1E100
-        
-        if isinstance(path_list[0],list):
-            return self.__compute_total_distance(path_list[0])
+        if get_path == True:
+            return path_list
         else:
-            return 1E100
+            #return a stupid high value if I cant find a path otherwise return the actual one
+            if path_list is None:
+                return 1E100
+            
+            if isinstance(path_list[0],list):
+                return self.__compute_total_distance(path_list[0])
+            else:
+                return 1E100
             
         
     def __compute_total_distance(self, path):
@@ -418,7 +422,7 @@ class Graph():
                 config_space = self.map.cluster_dict[str(node.cluster_coord)].cluster_space
                 config_bounds = self.map.cluster_dict[str(node.cluster_coord)].limits
                 intra_node2 = AbstractNode(entrance_loc, node.cluster_coord)
-                distance = self.__search_for_distance(node, intra_node2, config_space, config_bounds)
+                distance = self.__search_for_distance(node, intra_node2, config_space, config_bounds, False)
                 #probably should refactor this 
                 self.__add_temp_edges(node, intra_node2, distance, 1, "INTRA", key_name)
         
@@ -578,140 +582,6 @@ def set_obstacles_to_grid(grid, obstacle_list):
         grid.place_static_obstacle(obstacle)    
 
 
-class PlotSituation():
-    """
-    sanity check plots
-    """
-    def __init__(self, grid, obstacle_list):
-        
-        self.grid = grid
-        self.grid_size = [grid.x_size+1, grid.y_size+1, grid.z_size] 
-        self.obstacle_list = obstacle_list
-        
-    def __set_axis(self):
-        fig = plt.figure()
-        ax = Axes3D(fig)
-        ax.set_xlim([-1, self.grid_size[0]])
-        ax.set_ylim([-1, self.grid_size[1]])
-        ax.set_zlim([0,  self.grid_size[2]])
-        return fig,ax
-    
-    def __plot_static_obstacles(self, ax):
-        for obstacle in self.obstacle_list:
-            obstacle_z_list = obstacle.z_list
-            for obstacle_z in obstacle_z_list:
-               ax.scatter(obstacle.x, obstacle.y, obstacle_z, color='red')
-        
-    def plot_config_space(self):
-        """just plotting the configuration space"""
-        fig, ax = self.__set_axis()
-        
-        self.__plot_static_obstacles(ax)                
-
-        #lets plot regions in here too
-        color_list = ['g', 'c', 'm', 'b']
-        line_styles = ['-', '--', '-.', ':']
-        cluster_dict = annotated_map.cluster_dict
-        for i, (cluster_key, cluster) in enumerate(cluster_dict.items()):            
-            for j, (entrance_key, entrance) in enumerate(cluster.mapped_entrances.items()):
-                if entrance:
-                    x_val = [x[0] for x in entrance]
-                    y_val = [y[1] for y in entrance]
-                    z_val = [z[2] for z in entrance]
-                    ax.plot(x_val, y_val, z_val[0], color = color_list[i], linestyle=line_styles[j],
-                            label=(cluster_key,entrance_key))
-                    #ax.scatter(x_val, y_val, z_val, color=color_list[i], marker='x')
-                    
-        #xticks = np.arange(0,self.grid[0])
-        ax.legend()
-        plt.grid()
-        plt.show()
-        
-    def __extract_keys(self, node_keys):
-        node_locations = []
-        for node_key in node_keys:
-            node_locations.append(eval(node_key))
-            
-        return node_locations
-        
-            
-    def plot_nodes(self, graph):
-        """plot connection nodes"""
-        fig, ax  = self.__set_axis()
-        self.__plot_static_obstacles(ax)                    
-        node_dict = graph.graph
-        node_keys = node_dict.keys()
-        node_locations = self.__extract_keys(node_keys)
-        
-        #lets plot regions in here too
-        color_list = ['g', 'c', 'm', 'b']
-        line_styles = ['-', '--', '-.', ':']
-        cluster_dict = annotated_map.cluster_dict
-        color_map = {str([0,0]): color_list[0],
-                     str([0,1]): color_list[1],
-                     str([1,0]): color_list[2],
-                     str([1,1]): color_list[3]
-            }
-
-
-        for node_key, node_list in node_dict.items():
-            node_coords = []
-            inter_lines = []
-            for node in node_list:
-                node_coords.append(node.location)
-                if node.node_type == "INTER":
-                    node_marker = "x"
-                    inter_lines.append(node.location)
-                    ax.plot(node.location[0], node.location[1], node.location[2],
-                                  marker=node_marker, color=color_map[str(node.cluster_coord)])
-                        
-                x_val = [x[0] for x in node_coords]
-                y_val = [y[1] for y in node_coords]
-                z_val = [z[2] for z in node_coords]
-                ax.plot(x_val, y_val, z_val, color=color_map[str(node.cluster_coord)])
-                #ax.plot(x_val, y_val, z_val, color=color_list[0])
-                
-        ax.set_xlabel("x position")
-        
-    def plot_start_end(self, graph, start_position):
-        fig, ax  = self.__set_axis()
-        self.__plot_static_obstacles(ax)                    
-        node_dict = graph.graph
-        node_keys = node_dict.keys()
-        node_locations = self.__extract_keys(node_keys)
-        
-        #lets plot regions in here too
-        color_list = ['g', 'c', 'm', 'b']
-        line_styles = ['-', '--', '-.', ':']
-        cluster_dict = annotated_map.cluster_dict
-        color_map = {str([0,0]): color_list[0],
-                     str([0,1]): color_list[1],
-                     str([1,0]): color_list[2],
-                     str([1,1]): color_list[3]
-            }
-        
-        for node_key, node_list in node_dict.items():
-            node_coords = []
-            inter_lines = []
-            for node in node_list:
-                node_coords.append(node.location)
-                if node.node_type == "INTER":
-                    node_marker = "x"
-                    inter_lines.append(node.location)
-                    ax.plot(node.location[0], node.location[1], node.location[2],
-                                  marker=node_marker, color=color_map[str(node.cluster_coord)])
-                    
-    def plot_quadrant(self, graph, coordinates):
-        """plot the quadrant"""
-        color_list = ['g', 'c', 'm', 'b']
-        fig,ax = self.__set_axis()
-        self.__plot_static_obstacles(ax)
-        x_val = [x[0] for x in coordinates]
-        y_val = [y[1] for y in coordinates]
-        z_val = [z[2] for z in coordinates]
-        ax.plot(x_val, y_val, z_val, color=color_list[0])
-                    
-            
 def get_obstacle_coordinates(obstacles):
     """return locations of obstacles"""
     obst_coords = []
@@ -773,140 +643,60 @@ if __name__=='__main__':
     annotated_map.abstract_space(num_clusters)
     annotated_map.prune_entrances()
     annotated_map.link_entrances()
-    annotated_map.reduce_entryways(2)
+    annotated_map.reduce_entryways(5)
     
-    ####-------- GRAPH
+    ####-------- GRAPH 
+    """I need to cache this to a database and query it to reduce start up costs"""
     graph = Graph(annotated_map)
     graph.build_graph()    
     connections = graph.build_intra_edges()
-        
+       
+    
     #%% testing the search -> refactor this                  
     ## connecting the start and goal point to the abstract map
-    start_location = [8,8,2]
-    goal_location = [1,2,1]
+    start_location = [2,2,2]
+    goal_location = [9,6,0]
     
     graph.insert_temp_nodes(start_location, 1, start_location)
     graph.insert_temp_nodes(goal_location, 1, goal_location)
-        
-    #%% test to get sets and see if nodes and edges are connected
+    
+    #%% test to get sets and see if nodes and edges are connected]
     start_connections = graph.graph[str(start_location)]
     goal_connections = graph.graph[str(goal_location)]
         
     #%% Astar as graph search 
-    # from queue import PriorityQueue
-    
-    # def unpack_tuple_coordinates(tuple_coords):
-    #     return [tuple_coords[0],tuple_coords[1],tuple_coords[2]]    
-    
-    # class Node():
-    #     """
-    #     parent = parent of current node
-    #     posiition = position of node right now it will be x,y coordinates
-    #     g = cost from start to current to node
-    #     h = heuristic 
-    #     f = is total cost
-    #     """
-    #     def __init__(self, parent, position):
-    #         self.parent = parent
-    #         self.position = position
-            
-    #         self.g = 0
-    #         self.h = 0
-    #         self.f = 0
-            
-    #     def __lt__(self, other):
-    #         return self.f < other.f
-        
-    #     # Compare nodes
-    #     def __eq__(self, other):
-    #         return self.position == other.position
 
-    #     # Print node
-    #     def __repr__(self):
-    #         return ('({0},{1})'.format(self.position, self.f))
-
-    # def compute_euclidean(position, goal):
-    #     """compute euclidean distance"""
-    #     distance =  m.sqrt(((position[0] - goal[0]) ** 2) + 
-    #                        ((position[1] - goal[1]) ** 2) +
-    #                        ((position[2] - goal[2]) ** 2))
-        
-    #     return distance
-        
     #### ASTAR graph search
     astar_test_graph = graph.graph
     astar_graph = AstarGraph(astar_test_graph, start_location, goal_location)
-    astar_graph.main()
-
-    # openset = PriorityQueue() # priority queue
-    # closed_set = {}
+    path_home = astar_graph.main()
     
-    # ##init node
-    # start_node = Node(None,start_location)
-    # start_node.g = start_node.h = start_node.f = 0
-    # openset.put((start_node.f, start_node))
     
-    # end_node = Node(None, goal_location)
-    # end_node.g = end_node.h = end_node.f = 0
-    
-    # print("start and goal points are", start_location, goal_location)
-    # count = 0
-    # while not openset.empty():
-    #     if count >= 4000:
-    #         print("failure")
-    #         break
-                
-    #     #pop current node off
-    #     cost,current_node = openset.get()
+    #%% Refine searches begin low level search
+    #def __init__(self, grid, obs_list,start, goal, col_bubble, weight_factor)
+    test_grid = annotated_map._Map__grid
+    obst_coords = get_obstacle_coordinates(random_obstacles)
+    waypoint_coords = []
+    for i in range(len(path_home)):
+        if i+1>= len(path_home):
+            print("at the end")
+            break 
+        lowastar = Astar(test_grid, obst_coords, path_home[i], path_home[i+1], 0.5, 1)
+        waypoints = lowastar.main()
         
-    #     #check if at goal if so return path
-    #     if current_node.position == end_node.position:
-    #         path_home = []
-    #         print("found path", current_node)
-    #         current = current_node 
-    #         while current is not None:
-    #             path_home.append(current.position)
-    #             current = current.parent
-    #         #reverse path
-    #         path_home = path_home[::-1]
-    #         print("path home is", path_home)
-    #         break 
+        if waypoints:
+            waypoint_coords.extend(waypoints[0])
         
-    #     #put to closed set
-    #     closed_set[str(current_node.position)] = current_node
-                        
-    #     #get neighbors
-    #     current_node_position = unpack_tuple_coordinates(current_node.position)
         
-    #     #recieve all neighbors based on the graph request
-    #     neighbors = astar_test_graph[str(current_node_position)]
-    #     #search through adjacent neighbors look for possible paths
-    #     for neighbor in neighbors:            
-            
-    #         if neighbor.location == current_node_position:
-    #             #print("neighbor duplicates", neighbor.location)
-    #             continue
-                
-    #         #check if already in closed set
-    #         if str(neighbor.location) in closed_set:
-    #             #print("already in", neighbor.location)
-    #             continue 
-            
-    #         #print(neighbor.location)
-    #         new_node = Node(current_node, neighbor.location)
-    #         new_node.g = current_node.g + neighbor.cost
-    #         new_node.h = compute_euclidean(neighbor.location, goal_location)
-    #         new_node.f = new_node.g + new_node.h 
-            
-    #         openset.put((new_node.f, new_node))
-    
-    
      #%% Plotting stuff
-    plt.close('all')
+    from plot_situation import PlotSituation
+    
+    #plt.close('all')
     plt_situation = PlotSituation(annotated_map, random_obstacles)
     plt_situation.plot_config_space()
     plt_situation.plot_nodes(graph)
-    
+    plt_situation.plot_abstract_path(path_home, graph, 'black')
+    plt_situation.plot_abstract_path(waypoint_coords, graph, 'blue')
     # cluster_00 = annotated_map.cluster_dict["[0, 0]"]
     # cluster_01 = annotated_map.cluster_dict["[0, 1]"]
     # cluster_10 = annotated_map.cluster_dict["[1, 0]"]
