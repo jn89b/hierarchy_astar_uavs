@@ -161,6 +161,7 @@ class Astar():
         """main implementation"""
         while not self.openset.empty():
             count = count + 1
+            
             if count >= 4000:
                 print("iterations too much")
                 return None, count, self.closedset 
@@ -241,3 +242,111 @@ class Astar():
                 #add to open set
                 #print("putting in", child)
                 self.openset.put((child.f, child))
+                
+
+class AstarGraph():
+    def __init__(self, graph, start_location, end_location):
+        self.graph = graph
+        self.start_location = start_location
+        self.end_location = end_location
+        
+        self.openset = PriorityQueue() # priority queue
+        self.closedset = {}
+        self.iter_limit = 4000 #this is stupid should be a paramter
+        
+    def __init_nodes(self):
+        """initialize start and end location nodes"""
+        start_node = Node(None, self.start_location)
+        start_node.g = start_node.h = start_node.f = 0
+        self.openset.put((start_node.f, start_node))
+        
+        end_node = Node(None, self.end_location)
+        end_node.g = end_node.h = end_node.f = 0
+    
+    def __check_at_goal(self, current_position):
+        """check if we have arrived at the goal"""
+        if current_position == self.end_location:
+            return True
+
+    def __return_path_to_goal(self, current_node):
+        """return path to starts"""
+        path_goal  = []
+        current = current_node 
+        while current is not None:
+            path_goal.append(current.position)
+            current = current.parent
+        #reverse path
+        path_goal = path_goal[::-1]
+        print("path to goal is", path_goal)
+        
+        return path_goal
+    
+    def __unpack_tuple_coordinates(self, tuple_coords):
+        """return tuple coordinates as a list"""
+        return [tuple_coords[0],tuple_coords[1],tuple_coords[2]]
+
+    def __make_node(self, current_node, neighbor_node):
+        """inserts a new potential node to my neighbor based on neighbor
+        and references it to the current node as parent"""
+        new_node = Node(current_node, neighbor_node.location)
+        new_node.g = current_node.g + neighbor_node.cost
+        new_node.h = self.__compute_euclidean(neighbor_node.location, self.end_location)
+        new_node.f = new_node.g + new_node.h 
+        
+        return new_node
+    
+    def __compute_euclidean(self,position, goal):
+        """compute euclidean distance as heuristic"""
+        distance =  m.sqrt(((position[0] - goal[0]) ** 2) + 
+                            ((position[1] - goal[1]) ** 2) +
+                            ((position[2] - goal[2]) ** 2))
+        
+        return distance
+        
+        return distance
+        
+    def main(self):
+        """main implementation"""
+        self.__init_nodes()
+        
+        #setting a iter count to prevent it from running forever
+        iter_count = 0
+        while not self.openset.empty():
+            
+            #pop current node off
+            cost,current_node = self.openset.get()
+            
+            if iter_count >= self.iter_limit:
+                # iter count
+                return iter_count
+            
+            if self.__check_at_goal(current_node.position):
+                path_home = self.__return_path_to_goal(current_node)
+                return path_home
+            
+            self.closedset[str(current_node.position)] = current_node
+            
+            current_node_position = self.__unpack_tuple_coordinates(current_node.position)
+            neighbors = self.graph[str(current_node_position)]
+            for neighbor in neighbors:
+                
+                if neighbor.location == current_node_position:
+                    continue
+                
+                if str(neighbor.location) in self.closedset:
+                    continue
+                
+                #make new node
+                new_node = self.__make_node(current_node, neighbor)
+            
+                #put to open set
+                self.openset.put((new_node.f, new_node))
+            
+            iter_count +=1
+            
+        
+        
+        
+        
+        
+                    

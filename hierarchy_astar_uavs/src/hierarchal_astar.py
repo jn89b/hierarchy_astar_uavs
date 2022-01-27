@@ -14,7 +14,7 @@ import math as m
 import matplotlib.pyplot as plt
 import random
 
-from Astar import Astar
+from Astar import Astar, AstarGraph
 from mpl_toolkits.mplot3d import axes3d, Axes3D 
 import itertools
 from itertools import combinations, permutations, product
@@ -411,16 +411,16 @@ class Graph():
         mapped_entrances_start = graph.map.cluster_dict[str(node.cluster_coord)].mapped_entrances
         for entrance, entrance_list in mapped_entrances_start.items():
             for entrance_loc in entrance_list:
-                if node.location[2] != entrance_loc[2]:
-                    print(node.location[2] != entrance_loc[2])
-                    continue
-                else:
-                    config_space = self.map.cluster_dict[str(node.cluster_coord)].cluster_space
-                    config_bounds = self.map.cluster_dict[str(node.cluster_coord)].limits
-                    intra_node2 = AbstractNode(entrance_loc, node.cluster_coord)
-                    distance = self.__search_for_distance(node, intra_node2, config_space, config_bounds)
-                    #probably should refactor this 
-                    self.__add_temp_edges(node, intra_node2, distance, 1, "INTRA", key_name)
+                # if node.location[2] != entrance_loc[2]:
+                #     print(node.location[2] != entrance_loc[2])
+                #     continue
+                # else:
+                config_space = self.map.cluster_dict[str(node.cluster_coord)].cluster_space
+                config_bounds = self.map.cluster_dict[str(node.cluster_coord)].limits
+                intra_node2 = AbstractNode(entrance_loc, node.cluster_coord)
+                distance = self.__search_for_distance(node, intra_node2, config_space, config_bounds)
+                #probably should refactor this 
+                self.__add_temp_edges(node, intra_node2, distance, 1, "INTRA", key_name)
         
         
     def insert_temp_nodes(self, location, level, key_name):
@@ -780,150 +780,125 @@ if __name__=='__main__':
     graph.build_graph()    
     connections = graph.build_intra_edges()
         
-    #%% testing the search -> refactor this              
-    # def connect_to_border(node):
-    #     """connect borders to the map, I should have this in the graph class but define the key value
-    #     so set key to start and goal to make it temporary"""
-    #     mapped_entrances_start = graph.map.cluster_dict[str(node.cluster_coord)].mapped_entrances
-    #     for entrance, entrance_list in mapped_entrances_start.items():
-    #         for entrance_loc in entrance_list:
-    #             #check if at same level
-    #             if node.location[2] != entrance_loc[2]:
-    #                 print(node.location[2] != entrance_loc[2])
-    #                 continue
-    #             else:
-    #                 config_space = graph.map.cluster_dict[str(node.cluster_coord)].cluster_space
-    #                 config_bounds = graph.map.cluster_dict[str(node.cluster_coord)].limits
-    #                 intra_node2 = AbstractNode(entrance_loc, node.cluster_coord)
-    #                 distance = graph._Graph__search_for_distance(node, intra_node2, config_space, config_bounds)
-    #                 graph._Graph__add_edge(node, intra_node2, distance, 1, "INTRA")
-        
-    
+    #%% testing the search -> refactor this                  
     ## connecting the start and goal point to the abstract map
-    start_location = [8,8,1]
+    start_location = [8,8,2]
     goal_location = [1,2,1]
     
     graph.insert_temp_nodes(start_location, 1, start_location)
     graph.insert_temp_nodes(goal_location, 1, goal_location)
-    
-    # start_node = graph.determine_cluster(start_location)
-    # goal_node = graph.determine_cluster(goal_location)
-    # graph._Graph__add_node(start_node)
-    # graph._Graph__add_node(goal_node)
-    # connect_to_border(start_node)
-    # connect_to_border(goal_node) 
-    
-    
+        
     #%% test to get sets and see if nodes and edges are connected
-    #mapped_entrances_goal = graph.map.cluster_dict["end"].mapped_entrances
     start_connections = graph.graph[str(start_location)]
     goal_connections = graph.graph[str(goal_location)]
         
     #%% Astar as graph search 
-    from queue import PriorityQueue
+    # from queue import PriorityQueue
     
-    def unpack_tuple_coordinates(tuple_coords):
-        return [tuple_coords[0],tuple_coords[1],tuple_coords[2]]    
+    # def unpack_tuple_coordinates(tuple_coords):
+    #     return [tuple_coords[0],tuple_coords[1],tuple_coords[2]]    
     
-    class Node():
-        """
-        parent = parent of current node
-        posiition = position of node right now it will be x,y coordinates
-        g = cost from start to current to node
-        h = heuristic 
-        f = is total cost
-        """
-        def __init__(self, parent, position):
-            self.parent = parent
-            self.position = position
+    # class Node():
+    #     """
+    #     parent = parent of current node
+    #     posiition = position of node right now it will be x,y coordinates
+    #     g = cost from start to current to node
+    #     h = heuristic 
+    #     f = is total cost
+    #     """
+    #     def __init__(self, parent, position):
+    #         self.parent = parent
+    #         self.position = position
             
-            self.g = 0
-            self.h = 0
-            self.f = 0
+    #         self.g = 0
+    #         self.h = 0
+    #         self.f = 0
             
-        def __lt__(self, other):
-            return self.f < other.f
+    #     def __lt__(self, other):
+    #         return self.f < other.f
         
-        # Compare nodes
-        def __eq__(self, other):
-            return self.position == other.position
+    #     # Compare nodes
+    #     def __eq__(self, other):
+    #         return self.position == other.position
 
-        # Print node
-        def __repr__(self):
-            return ('({0},{1})'.format(self.position, self.f))
+    #     # Print node
+    #     def __repr__(self):
+    #         return ('({0},{1})'.format(self.position, self.f))
 
-    def compute_euclidean(position, goal):
-        """compute euclidean distance"""
-        distance =  m.sqrt(((position[0] - goal[0]) ** 2) + 
-                           ((position[1] - goal[1]) ** 2) +
-                           ((position[2] - goal[2]) ** 2))
+    # def compute_euclidean(position, goal):
+    #     """compute euclidean distance"""
+    #     distance =  m.sqrt(((position[0] - goal[0]) ** 2) + 
+    #                        ((position[1] - goal[1]) ** 2) +
+    #                        ((position[2] - goal[2]) ** 2))
         
-        return distance
+    #     return distance
         
-    ##astar search
+    #### ASTAR graph search
     astar_test_graph = graph.graph
-    openset = PriorityQueue() # priority queue
-    closed_set = {}
+    astar_graph = AstarGraph(astar_test_graph, start_location, goal_location)
+    astar_graph.main()
+
+    # openset = PriorityQueue() # priority queue
+    # closed_set = {}
     
-    ##init node
-    start_node = Node(None,start_location)
-    start_node.g = start_node.h = start_node.f = 0
-    openset.put((start_node.f, start_node))
+    # ##init node
+    # start_node = Node(None,start_location)
+    # start_node.g = start_node.h = start_node.f = 0
+    # openset.put((start_node.f, start_node))
     
-    end_node = Node(None, goal_location)
-    end_node.g = end_node.h = end_node.f = 0
+    # end_node = Node(None, goal_location)
+    # end_node.g = end_node.h = end_node.f = 0
     
-    print("start and goal points are", start_location, goal_location)
-    count = 0
-    while not openset.empty():
-        if count >= 4000:
-            print("failure")
-            break
+    # print("start and goal points are", start_location, goal_location)
+    # count = 0
+    # while not openset.empty():
+    #     if count >= 4000:
+    #         print("failure")
+    #         break
                 
-        #pop current node off
-        cost,current_node = openset.get()
+    #     #pop current node off
+    #     cost,current_node = openset.get()
         
-        #check if at goal if so return path
-        if current_node.position == end_node.position:
-            path_home = []
-            print("found path", current_node)
-            current = current_node 
-            while current is not None:
-                path_home.append(current.position)
-                current = current.parent
-            #reverse path
-            path_home = path_home[::-1]
-            print("path home is", path_home)
-            break 
+    #     #check if at goal if so return path
+    #     if current_node.position == end_node.position:
+    #         path_home = []
+    #         print("found path", current_node)
+    #         current = current_node 
+    #         while current is not None:
+    #             path_home.append(current.position)
+    #             current = current.parent
+    #         #reverse path
+    #         path_home = path_home[::-1]
+    #         print("path home is", path_home)
+    #         break 
         
-        #print("cost is", cost)
-        #print("current node is", current_node.position)
-        closed_set[str(current_node.position)] = current_node
+    #     #put to closed set
+    #     closed_set[str(current_node.position)] = current_node
                         
-        #get neighbors
-        current_node_position = unpack_tuple_coordinates(current_node.position)
+    #     #get neighbors
+    #     current_node_position = unpack_tuple_coordinates(current_node.position)
         
-        #recieve all neighbors based on the graph request
-        neighbors = astar_test_graph[str(current_node_position)]
-        #search through adjacent neighbors look for possible paths
-        for neighbor in neighbors:            
+    #     #recieve all neighbors based on the graph request
+    #     neighbors = astar_test_graph[str(current_node_position)]
+    #     #search through adjacent neighbors look for possible paths
+    #     for neighbor in neighbors:            
             
-            if neighbor.location == current_node_position:
-                #print("neighbor duplicates", neighbor.location)
-                continue
+    #         if neighbor.location == current_node_position:
+    #             #print("neighbor duplicates", neighbor.location)
+    #             continue
                 
-            #check if already in closed set
-            if str(neighbor.location) in closed_set:
-                #print("already in", neighbor.location)
-                continue 
+    #         #check if already in closed set
+    #         if str(neighbor.location) in closed_set:
+    #             #print("already in", neighbor.location)
+    #             continue 
             
-            #print(neighbor.location)
-            new_node = Node(current_node, neighbor.location)
-            new_node.g = current_node.g + neighbor.cost
-            new_node.h = compute_euclidean(neighbor.location, goal_location)
-            new_node.f = new_node.g + new_node.h 
+    #         #print(neighbor.location)
+    #         new_node = Node(current_node, neighbor.location)
+    #         new_node.g = current_node.g + neighbor.cost
+    #         new_node.h = compute_euclidean(neighbor.location, goal_location)
+    #         new_node.f = new_node.g + new_node.h 
             
-            openset.put((new_node.f, new_node))
+    #         openset.put((new_node.f, new_node))
     
     
      #%% Plotting stuff
