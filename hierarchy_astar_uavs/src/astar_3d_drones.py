@@ -78,6 +78,7 @@ class Astar():
 
     def __init__(self, grid, obs_list,start, goal, col_bubble, weight_factor):
         self.grid = grid
+        self.grid_z, self.grid_x, self.grid_y = grid
         self.start = start
         self.goal = goal
         print("starting", start, goal)
@@ -114,7 +115,7 @@ class Astar():
 
     def is_move_valid(self, node_position):
         """check if move made is valid if so then return True"""
-        if (node_position[0] > (len(self.grid) - 1) or 
+        if (node_position[0] > (self.grid_x- 1) or 
             node_position[0] < 0 or 
             node_position[1] > (len(self.grid)-1) or 
             node_position[1] < 0 or
@@ -257,12 +258,13 @@ class Astar():
                     child.f = child.g + (child.h *penalty*dynamic_weight)
                     print(child.f)
                 else:
+                    dynamic_weight = 15
                     cost = self.compute_euclidean(current_node.position, child)
                     #print(current_node.g)
                     child.g = current_node.g + 1
                     #dynamic_weight = 15
                     child.h = self.compute_euclidean(child.position, self.end_node)
-                    child.f = child.g + (child.h *penalty*self.weight_factor)
+                    child.f = child.g + (child.h *penalty*dynamic_weight)
                 #print(child.f)
                 
                 #add to open set
@@ -444,10 +446,10 @@ if __name__ == '__main__':
     obstacle_list = some_list
     obstacle_list = add_obstacles(grid, obstacle_list)
     
-    landing_zones = [(4, 10,5), (20,30,5), (30, 20, 5), (30, 30, 5)] 
+    landing_zones = [(24, 6,13), (20,30,5), (30, 20, 5), (30, 30, 5)] 
     
     # #uav0
-    uav_0 = UAV("uav0", [3, 9, 15], 0, landing_zones[0])
+    uav_0 = UAV("uav0", [24, 1, 15], 0, landing_zones[0])
     uav_1 = UAV("uav1", [13, 0, 9], 2, landing_zones[2])
     uav_2 = UAV("uav2", [49, 20, 12], 3, landing_zones[3])
     uav_3 = UAV("uav3", [49, 16, 13], 1, landing_zones[1])          
