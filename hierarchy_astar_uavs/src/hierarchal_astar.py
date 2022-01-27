@@ -749,7 +749,7 @@ if __name__=='__main__':
         
     
     ## connecting the start and goal point to the abstract map
-    start_location = [4,7,1]
+    start_location = [8,8,1]
     goal_location = [1,2,1]
     start_node = determine_cluster(start_location)
     goal_node = determine_cluster(goal_location)
@@ -765,39 +765,6 @@ if __name__=='__main__':
     
     
     #%% Astar as graph search 
-    """
-    so initiate node 
-    set node to open then pop it out 
-    
-    search for node location from my graph in dictionary i get a set of adjacent nodes
-    
-    These are my neighbors so loop through each neighbor:
-        get location of neighbor 
-        if neighbor location exists then continue
-        
-        compute cost of neighbor
-        total_val = g.cost + heuristic
-        
-        put the neighbor inside the open set with key as total_val in priority queue
-    
-    astar search with graph:
-        f = g + h 
-        f = total cost
-        g = edge cost
-        h  = heuristic cost
-        g is what we computed originally
-        inputs:
-            graph which is a hashtable with key as coordinate of the node
-            inside each key has the abstractnode which are the inter or intra connections 
-            start_location 
-            goal_location
-        
-        init the open and closed sets -> use open set as priority queue
-        insert start node as open location
-        
-        while open list is not empty:
-            set current node equal                     
-    """
     from queue import PriorityQueue
     
     def unpack_tuple_coordinates(tuple_coords):
@@ -840,45 +807,43 @@ if __name__=='__main__':
         
     ##astar search
     astar_test_graph = graph.graph
-    open_set = []
+    openset = PriorityQueue() # priority queue
     closed_set = {}
     
     ##init node
     start_node = Node(None,start_location)
     start_node.g = start_node.h = start_node.f = 0
-    open_set.append(start_node)
-    #open_set.put((start_node.f, start_node))
+    openset.put((start_node.f, start_node))
     
-    #self.openset.append(start_node)
     end_node = Node(None, goal_location)
     end_node.g = end_node.h = end_node.f = 0
     
+    print("start and goal points are", start_location, goal_location)
     count = 0
-    #while not open_set.empty():
-    while len(open_set) > 0:
-        
+    while not openset.empty():
         if count >= 4000:
             print("failure")
             break
-        
+                
         #pop current node off
-        #cost,current_node = open_set.get()
-        current_index = 0
-        current_node = open_set.pop(current_index)
-        for index, item in enumerate(open_set):
-            if item.f < current_node.f:
-                current_node = item
-                current_index = index
+        cost,current_node = openset.get()
+        
+        #check if at goal if so return path
+        if current_node.position == end_node.position:
+            path_home = []
+            print("current node is", current_node)
+            current = current_node 
+            while current is not None:
+                path_home.append(current.position)
+                current = current.parent
+            #reverse path
+            path_home = path_home[::-1]
+            break 
         
         #print("cost is", cost)
         #print("current node is", current_node.position)
         closed_set[str(current_node.position)] = current_node
-                
-        #check if at goal
-        if current_node.position == end_node.position:
-            print("success at goal", current_node.position)
-            break 
-        
+                        
         #get neighbors
         current_node_position = unpack_tuple_coordinates(current_node.position)
         
@@ -886,32 +851,26 @@ if __name__=='__main__':
         neighbors = astar_test_graph[str(current_node_position)]
         #search through adjacent neighbors look for possible paths
         for neighbor in neighbors:            
-            #check if we have crazy duplicates
-            print(neighbor.location)
             
             if neighbor.location == current_node_position:
-                print("neighbor duplicates", neighbor.location)
+                #print("neighbor duplicates", neighbor.location)
                 continue
                 
             #check if already in closed set
             if str(neighbor.location) in closed_set:
-                print("already in", neighbor.location)
+                #print("already in", neighbor.location)
                 continue 
             
-            print(neighbor.location)
-            new_node = Node(current_node_position, neighbor.location)
+            #print(neighbor.location)
+            new_node = Node(current_node, neighbor.location)
             new_node.g = current_node.g + neighbor.cost
             new_node.h = compute_euclidean(neighbor.location, goal_location)
             new_node.f = new_node.g + new_node.h 
             
-            for open_node in open_set:
-                if new_node == open_node and new_node.g > open_node.g:
-                    continue
-            open_set.append(new_node)
-            #open_set.put((new_node.f, new_node))
+            openset.put((new_node.f, new_node))
     
     
-    #%% Plotting stuff
+     #%% Plotting stuff
     plt.close('all')
     plt_situation = PlotSituation(annotated_map, random_obstacles)
     plt_situation.plot_config_space()

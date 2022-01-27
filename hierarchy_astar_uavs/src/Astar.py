@@ -160,9 +160,7 @@ class Astar():
         count = 0 
         """main implementation"""
         while not self.openset.empty():
-        #while len(self.openset) > 0:
             count = count + 1
-            #print(count)
             if count >= 4000:
                 print("iterations too much")
                 return None, count, self.closedset 
