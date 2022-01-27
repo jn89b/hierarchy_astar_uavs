@@ -185,15 +185,6 @@ class Map():
                         #print("coordinates are", i, coordinates)
                         entrances.remove(coordinates)
 
-    
-    def __check_direction_change(self,entrance_key):
-        """figure out where we should check for discontinuity x or y?
-        x is 0 y is 1"""
-        if entrance_key == "upper_entrance" or entrance_key == "lower_entrance":
-            return 0 
-        else:
-            return 1
-                
     def abstract_space(self, n_clusters):
         """generate clusters based on some number you want does it into 
         square pieces for this situation"""
@@ -236,7 +227,6 @@ class Map():
             print("no bueno")
             
 class Graph():
-    
     def __init__(self, configuration_map):
         self.graph = {}
         self.map = configuration_map
@@ -262,8 +252,8 @@ class Graph():
     def build_intra_edges(self):
         """build intra edges within clusters 
         number of connectsion = entrace_con + (m-1)(n) 
-        where m is the number of nodes in the curent location and n is the 
-        number of nodes in the adjaent side"""
+        where m is the number of nodes in the current location and n is the 
+        number of nodes in the adjacent side"""
         for idx, (cluster, cluster_vals) in enumerate(self.map.cluster_dict.items()):
             cluster_loc = cluster_vals.cluster_coords
             inner_connections = []
@@ -284,6 +274,8 @@ class Graph():
                 
             #intra_connections_list = inner_sets
             intra_connections_list = self.__remove_coords_diff_depth(inner_sets)
+            
+            #this is a test to reduce the grid
             if idx == 4:
                 return intra_connections_list, inner_sets
             
@@ -296,8 +288,7 @@ class Graph():
                 config_bounds = self.map.cluster_dict[str(cluster_loc)].limits
                 distance = self.__search_for_distance(intra_node1, intra_node2, config_space, config_bounds)
                 self.__add_edge(intra_node1, intra_node2, distance, 1, "INTRA")
-                
-                
+                                
     def __search_for_distance(self, intra_node1, intra_node2, cluster_space, config_bounds):
         """search for distance between two intra nodes using Astar"""
         obstacle_coords = self.map.get_obstacle_list()
@@ -316,12 +307,11 @@ class Graph():
         goal_position = [abs(intra_node2.location[0] - x_bounds[0]),
                           abs(intra_node2.location[1] - y_bounds[0]), intra_node2.location[2]]
                           
+        #added a garbage collection to remove clutter since this function will be used 
         gc.collect()
         astar = Astar(cluster_space, obstacle_coords, start_position,
                       goal_position, self.map.z_size, 0)
-        
-        #def __init__(self, grid, obs_list,start, goal, col_bubble, weight_factor):
-        
+    
         path_list = astar.main()
         #print("path list is", path_list[0])
         
@@ -350,6 +340,13 @@ class Graph():
         node1.set_node_type(node_type)
         node2.set_node_type(node_type)
         
+        #check if intra node connections exists
+        if not str(node1.location) in self.graph:
+            self.graph[str(node1.location)] = set([node1])
+            
+        if not str(node2.location) in self.graph:
+            self.graph[str(node2.location)] = set([node2])
+        
         self.graph[str(node1.location)].add(node2)
         self.graph[str(node2.location)].add(node1)
             
@@ -370,13 +367,72 @@ class Graph():
                 #print("removing", coordinate_set)
                 inner_sets.remove(coordinate_set)
         return inner_sets
-    
-    def insert_node(self, node, level):
-        """inserts a node at some level to do:
-            based on node position determine the cluster area 
-            then connect node to border
-            then set level
+   
+    def determine_cluster(self, coordinates):
+        """determine which cluster location the coordinate set is located at 
+        coordinates have to be x,y,z, and makes anode based on this"""
+        
+        #weaker precondition stronger postcondition check
+        if len(coordinates) != 3:
+            print("the coordinate input must be a list of [x,y,z]")
+            return None
+        
+        for cluster, cluster_vals in graph.map.cluster_dict.items():
+            #print(cluster_vals.cluster_coords)
+            x_bounds, y_bounds = cluster_vals.limits
+            #print(cluster_vals.limits)
+            if coordinates[0] in range(x_bounds[0], x_bounds[1]+1) and coordinates[1] in range(y_bounds[0], y_bounds[1]+1):
+                print("yes", cluster_vals.cluster_coords)
+                node = AbstractNode(coordinates , cluster_vals.cluster_coords)        
+                return node
+     
+    def __add_temp_edges(self, temp_node, node2, weight, level, node_type, key_name):
+        """adds the temporary node and connects it with other nodes in the hashtable"""
+        temp_node.set_cost(weight)
+        node2.set_cost(weight)
+        
+        temp_node.set_node_type(node_type)
+        node2.set_node_type(node_type)
+        
+        #check if intra node connections exists
+        if not str(key_name) in self.graph:
+            self.graph[str(key_name)] = set([temp_node])
+            
+        if not str(node2.location) in self.graph:
+            self.graph[str(node2.location)] = set([node2])
+        
+        self.graph[str(key_name)].add(node2)
+        self.graph[str(node2.location)].add(temp_node)
+            
+        
+    def connect_to_border(self,node, key_name):
+        """connect borders to the map, I should have this in the graph class but define the key value
+        so set key to start and goal to make it temporary"""
+        mapped_entrances_start = graph.map.cluster_dict[str(node.cluster_coord)].mapped_entrances
+        for entrance, entrance_list in mapped_entrances_start.items():
+            for entrance_loc in entrance_list:
+                if node.location[2] != entrance_loc[2]:
+                    print(node.location[2] != entrance_loc[2])
+                    continue
+                else:
+                    config_space = self.map.cluster_dict[str(node.cluster_coord)].cluster_space
+                    config_bounds = self.map.cluster_dict[str(node.cluster_coord)].limits
+                    intra_node2 = AbstractNode(entrance_loc, node.cluster_coord)
+                    distance = self.__search_for_distance(node, intra_node2, config_space, config_bounds)
+                    #probably should refactor this 
+                    self.__add_temp_edges(node, intra_node2, distance, 1, "INTRA", key_name)
+        
+        
+    def insert_temp_nodes(self, location, level, key_name):
+        """insert temp nodes into the graph takes in the AbstractNode, level, 
+        and hash key name to be inserted 
+        - use methods to determine cluster
+        - connect to border
+        - set level
         """
+        temp_node = self.determine_cluster(location)
+        self.connect_to_border(temp_node, key_name)
+        #self.__add_temp_edges(temp_node, node2, weight, level, node_type, key_name)
         
         
 class AbstractNode():
@@ -698,6 +754,8 @@ def compute_offsets(position, config_bounds):
     
     return [abs(position[0] - x_offset), abs(position[1] - y_offset), position[2]]
 
+
+#%% Run main functions
 if __name__=='__main__':
     x_size = 10
     y_size = 10
@@ -722,48 +780,45 @@ if __name__=='__main__':
     graph.build_graph()    
     connections = graph.build_intra_edges()
         
-    #%% testing the search -> refactor this
-    def determine_cluster(coordinates):
-        for cluster, cluster_vals in graph.map.cluster_dict.items():
-            #print(cluster_vals.cluster_coords)
-            x_bounds, y_bounds = cluster_vals.limits
-            #print(cluster_vals.limits)
-            if coordinates[0] in range(x_bounds[0], x_bounds[1]+1) and coordinates[1] in range(y_bounds[0], y_bounds[1]+1):
-                print("yes", cluster_vals.cluster_coords)
-                node = AbstractNode(coordinates , cluster_vals.cluster_coords)        
-                return node
-              
-    def connect_to_border(node):
-        mapped_entrances_start = graph.map.cluster_dict[str(node.cluster_coord)].mapped_entrances
-        for entrance, entrance_list in mapped_entrances_start.items():
-            for entrance_loc in entrance_list:
-                if node.location[2] != entrance_loc[2]:
-                    print(node.location[2] != entrance_loc[2])
-                    continue
-                else:
-                    config_space = graph.map.cluster_dict[str(node.cluster_coord)].cluster_space
-                    config_bounds = graph.map.cluster_dict[str(node.cluster_coord)].limits
-                    intra_node2 = AbstractNode(entrance_loc, node.cluster_coord)
-                    distance = graph._Graph__search_for_distance(node, intra_node2, config_space, config_bounds)
-                    graph._Graph__add_edge(node, intra_node2, distance, 1, "INTRA")
+    #%% testing the search -> refactor this              
+    # def connect_to_border(node):
+    #     """connect borders to the map, I should have this in the graph class but define the key value
+    #     so set key to start and goal to make it temporary"""
+    #     mapped_entrances_start = graph.map.cluster_dict[str(node.cluster_coord)].mapped_entrances
+    #     for entrance, entrance_list in mapped_entrances_start.items():
+    #         for entrance_loc in entrance_list:
+    #             #check if at same level
+    #             if node.location[2] != entrance_loc[2]:
+    #                 print(node.location[2] != entrance_loc[2])
+    #                 continue
+    #             else:
+    #                 config_space = graph.map.cluster_dict[str(node.cluster_coord)].cluster_space
+    #                 config_bounds = graph.map.cluster_dict[str(node.cluster_coord)].limits
+    #                 intra_node2 = AbstractNode(entrance_loc, node.cluster_coord)
+    #                 distance = graph._Graph__search_for_distance(node, intra_node2, config_space, config_bounds)
+    #                 graph._Graph__add_edge(node, intra_node2, distance, 1, "INTRA")
         
     
     ## connecting the start and goal point to the abstract map
     start_location = [8,8,1]
     goal_location = [1,2,1]
-    start_node = determine_cluster(start_location)
-    goal_node = determine_cluster(goal_location)
-    graph._Graph__add_node(start_node)
-    graph._Graph__add_node(goal_node)
-    connect_to_border(start_node)
-    connect_to_border(goal_node)    
-    mapped_entrances_goal = graph.map.cluster_dict[str(goal_node.cluster_coord)].mapped_entrances
+    
+    graph.insert_temp_nodes(start_location, 1, start_location)
+    graph.insert_temp_nodes(goal_location, 1, goal_location)
+    
+    # start_node = graph.determine_cluster(start_location)
+    # goal_node = graph.determine_cluster(goal_location)
+    # graph._Graph__add_node(start_node)
+    # graph._Graph__add_node(goal_node)
+    # connect_to_border(start_node)
+    # connect_to_border(goal_node) 
+    
     
     #%% test to get sets and see if nodes and edges are connected
+    #mapped_entrances_goal = graph.map.cluster_dict["end"].mapped_entrances
     start_connections = graph.graph[str(start_location)]
-    goal_connections = graph.graph[str(start_location)]
-    
-    
+    goal_connections = graph.graph[str(goal_location)]
+        
     #%% Astar as graph search 
     from queue import PriorityQueue
     
@@ -831,13 +886,14 @@ if __name__=='__main__':
         #check if at goal if so return path
         if current_node.position == end_node.position:
             path_home = []
-            print("current node is", current_node)
+            print("found path", current_node)
             current = current_node 
             while current is not None:
                 path_home.append(current.position)
                 current = current.parent
             #reverse path
             path_home = path_home[::-1]
+            print("path home is", path_home)
             break 
         
         #print("cost is", cost)
