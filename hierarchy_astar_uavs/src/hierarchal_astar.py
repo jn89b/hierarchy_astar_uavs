@@ -13,13 +13,13 @@ import numpy as np
 import math as m
 import random
 
-from Astar import Astar, AstarGraph
+from Astar import Astar, AstarGraph, AstarLowLevel
 import itertools
 from itertools import combinations, permutations, product
 import time
 import gc
 import heapq
-
+import pickle
 
 class Map():
     """
@@ -204,7 +204,7 @@ class Map():
                     
                     #[start:stop] had to add this stupid offset to make sure we append the right values
                     cluster_space = self.__grid[:,x_min_max[0]:x_min_max[1]+ self.offset_val,
-                                                y_min_max[0]:y_min_max[1]+ self.offset_val]                        
+                                                y_min_max[0]:y_min_max[1]+ self.offset_val]  
                     
                     cluster_edges = self.__get_cluster_edges(step_size,
                                                              cluster_space)
@@ -225,8 +225,21 @@ class Map():
             print("no bueno")
             
 class Graph():
-    def __init__(self, configuration_map):
-        self.graph = {}
+    def __init__(self, configuration_map, load_data):
+        """
+        load data boolean gives me the condition to either load pre generated graph to reduce 
+        start up costs
+        """
+        if load_data == True:
+            """
+            Need to refactor this line to allower the user to specify the pkl 
+            file location
+            """
+            with open('test.pkl', 'rb') as f:
+                self.graph = pickle.load(f)
+        else:
+            self.graph = {}
+        
         self.map = configuration_map
         self.level = 1
         
@@ -270,8 +283,8 @@ class Graph():
                                      , product(inner_connections[1], inner_connections[0])):
                 inner_sets.append(r)
                 
-            #intra_connections_list = self.__remove_coords_diff_depth(inner_sets)
-            intra_connections_list = inner_sets
+            intra_connections_list = self.__remove_coords_diff_depth(inner_sets)
+            #intra_connections_list = inner_sets
             
             #this is a test to reduce the grid
             if idx == 4:
@@ -284,10 +297,11 @@ class Graph():
                 
                 config_space = self.map.cluster_dict[str(cluster_loc)].cluster_space
                 config_bounds = self.map.cluster_dict[str(cluster_loc)].limits
-                distance = self.__search_for_distance(intra_node1, intra_node2, config_space, config_bounds, False)
+                distance = self.compute_actual_euclidean(intra_node1.location, intra_node2.location)
+                #distance = self.__search_for_distance(intra_node1, intra_node2, config_space, config_bounds)
                 self.__add_edge(intra_node1, intra_node2, distance, 1, "INTRA")
                                 
-    def __search_for_distance(self, intra_node1, intra_node2, cluster_space, config_bounds, get_path):
+    def __search_for_distance(self, intra_node1, intra_node2, cluster_space, config_bounds):
         """search for distance between two intra nodes using Astar
         this is due for a refactoring
         """
@@ -311,24 +325,28 @@ class Graph():
         #added a garbage collection to remove clutter since this function will be used 
         gc.collect()
         astar = Astar(cluster_space, obstacle_coords, start_position,
-                      goal_position, self.map.z_size, 10)
+                      goal_position, 0.5 , 5)
     
         path_list = astar.main()
         #print("path list is", path_list[0])
+
+        #return a stupid high value if I cant find a path otherwise return the actual one
+        if path_list is None:
+            return 1E100
         
-        if get_path == True:
-            return path_list
+        if isinstance(path_list[0],list):
+            return self.__compute_total_distance(path_list[0])
         else:
-            #return a stupid high value if I cant find a path otherwise return the actual one
-            if path_list is None:
-                return 1E100
+            return 1E100
             
-            if isinstance(path_list[0],list):
-                return self.__compute_total_distance(path_list[0])
-            else:
-                return 1E100
-            
+    def compute_actual_euclidean(self, position, goal):
+        distance =  (((position[0] - position[0]) ** 2) + 
+                           ((position[1] - position[1]) ** 2) +
+                           ((position[2] - position[2]) ** 2))**(1/2)
         
+        return distance
+        
+
     def __compute_total_distance(self, path):
         """compute total sum of distance travelled from path list"""
         #print("path array", path)
@@ -370,6 +388,7 @@ class Graph():
             if abs(coord1[2] - coord2[2]) >=1:
                 #print("removing", coordinate_set)
                 inner_sets.remove(coordinate_set)
+        
         return inner_sets
    
     def determine_cluster(self, coordinates):
@@ -386,9 +405,9 @@ class Graph():
             x_bounds, y_bounds = cluster_vals.limits
             #print(cluster_vals.limits)
             if coordinates[0] in range(x_bounds[0], x_bounds[1]+1) and coordinates[1] in range(y_bounds[0], y_bounds[1]+1):
-                print("yes", cluster_vals.cluster_coords)
-                node = AbstractNode(coordinates , cluster_vals.cluster_coords)        
-                return node
+                #print("yes", cluster_vals.cluster_coords)
+                
+                return cluster_vals.cluster_coords
      
     def __add_temp_edges(self, temp_node, node2, weight, level, node_type, key_name):
         """adds the temporary node and connects it with other nodes in the hashtable"""
@@ -412,21 +431,24 @@ class Graph():
     def connect_to_border(self,node, key_name):
         """connect borders to the map, I should have this in the graph class but define the key value
         so set key to start and goal to make it temporary"""
+        offset_limit = 10
+        height_bounds = [node.location[2]-offset_limit, node.location[2]+offset_limit]
         mapped_entrances_start = graph.map.cluster_dict[str(node.cluster_coord)].mapped_entrances
+        
         for entrance, entrance_list in mapped_entrances_start.items():
             for entrance_loc in entrance_list:
-                # if node.location[2] != entrance_loc[2]:
-                #     print(node.location[2] != entrance_loc[2])
-                #     continue
-                # else:
-                config_space = self.map.cluster_dict[str(node.cluster_coord)].cluster_space
-                config_bounds = self.map.cluster_dict[str(node.cluster_coord)].limits
-                intra_node2 = AbstractNode(entrance_loc, node.cluster_coord)
-                distance = self.__search_for_distance(node, intra_node2, config_space, config_bounds, False)
-                #probably should refactor this 
-                self.__add_temp_edges(node, intra_node2, distance, 1, "INTRA", key_name)
-        
-        
+                """do a check for ranges don't want to connect to areas at higher places"""
+                if entrance_loc[2] > height_bounds[0] and entrance_loc[2] < height_bounds[1]:
+                    config_space = self.map.cluster_dict[str(node.cluster_coord)].cluster_space
+                    config_bounds = self.map.cluster_dict[str(node.cluster_coord)].limits
+                    intra_node2 = AbstractNode(entrance_loc, node.cluster_coord)
+                    distance = self.compute_actual_euclidean(node.location, intra_node2.location)
+                    #distance = self.__search_for_distance(node, intra_node2, config_space, config_bounds)
+                    #probably should refactor this 
+                    self.__add_temp_edges(node, intra_node2, distance, 1, "INTRA", key_name)
+                else:
+                    continue
+
     def insert_temp_nodes(self, location, level, key_name):
         """insert temp nodes into the graph takes in the AbstractNode, level, 
         and hash key name to be inserted 
@@ -434,11 +456,11 @@ class Graph():
         - connect to border
         - set level
         """
-        temp_node = self.determine_cluster(location)
+        cluster_coords = self.determine_cluster(location)
+        #print("cluster coords are", cluster_coords)
+        temp_node = AbstractNode(location , cluster_coords)        
         self.connect_to_border(temp_node, key_name)
-        #self.__add_temp_edges(temp_node, node2, weight, level, node_type, key_name)
-        
-        
+    
 class AbstractNode():
     def __init__(self, location, cluster_coord):
         self.location = location
@@ -512,7 +534,9 @@ class Cluster():
             for j in range(z_height+1): #this should be mapped to some three dimensional height
                 three_d = [some_coord[0], some_coord[1], j]
                 entrance_coords.append(three_d)
-        
+            
+            #sort the entrance coords based on z
+            entrance_coords.sort(key=lambda x:x[2])
         return entrance_coords
         
     def return_mapped_entrances(self):
@@ -576,11 +600,17 @@ def generate_random_obstacles(n_random, bound_lim, z_obs_height):
     
     return random_static_obstacles
 
+def generate_obstacles(bound_lim, z_obs_height):
+    for x,y in zip(x_random, y_random):
+        random_static_obstacles.append(Obstacle(x_loc=x, y_loc=y, z_init=0,\
+                                                z_final=z_obs_height))
+    
+    return random_static_obstacles
+    
 def set_obstacles_to_grid(grid, obstacle_list):
     """define obstacles"""
     for obstacle in obstacle_list:
         grid.place_static_obstacle(obstacle)    
-
 
 def get_obstacle_coordinates(obstacles):
     """return locations of obstacles"""
@@ -603,110 +633,218 @@ def test_permuations(graph):
             
     return intra_connections
 
-def compute_total_distance(path):
-    """compute total sum of distance travelled from path list"""
-    path_array = np.diff(np.array(path), axis=0)
-    segment_distance = np.sqrt((path_array ** 2).sum(axis=1))
-    
-    return np.sum(segment_distance)    
-
-def compute_offsets(position, config_bounds):
-    """compute offsets for search graph"""
-    #this is stupid I just need to apply an offset to make to the node positions
-    x_bounds = [config_bounds[0][0], config_bounds[1][0]]
-    x_offset = abs(x_bounds[0])
-
-    y_bounds = [config_bounds[0][1], config_bounds[1][1]]
-    y_offset = abs(y_bounds[0])
-    
-    new_position = [abs(position[0] - x_offset),
-                      abs(position[1] - y_offset), position[2]]
-    
-    return [abs(position[0] - x_offset), abs(position[1] - y_offset), position[2]]
-
+# https://stackoverflow.com/questions/4529815/saving-an-object-data-persistence
+def save_object(obj, filename):
+    with open(filename, 'wb') as outp:  # Overwrites any existing file.
+        pickle.dump(obj, outp, pickle.HIGHEST_PROTOCOL)
 
 #%% Run main functions
 if __name__=='__main__':
-    x_size = 10
-    y_size = 10
-    z_size = 2
+    x_size = 50
+    y_size = 50
+    z_size = 50
     
-    z_obs_height = 0
+    z_obs_height = 10
     num_clusters = 4
     
-    random_obstacles = generate_random_obstacles(n_random=2, bound_lim=x_size, z_obs_height=z_obs_height)
-    annotated_map = Map(z_size, x_size, y_size, get_obstacle_coordinates(random_obstacles))
     
-    set_obstacles_to_grid(grid=annotated_map, obstacle_list=random_obstacles)
+    load_map = True
+    load_graph = True
     
-    ##### CONFIGURATION SPACE    
-    annotated_map.abstract_space(num_clusters)
-    annotated_map.prune_entrances()
-    annotated_map.link_entrances()
-    annotated_map.reduce_entryways(5)
-    
+    if load_map == True:
+        with open('map_test.pkl', 'rb') as f:
+            annotated_map  = pickle.load(f)
+    else:
+        ##### CONFIGURATION SPACE
+        random_obstacles = generate_random_obstacles(n_random=3, bound_lim=x_size, z_obs_height=z_obs_height)
+        annotated_map = Map(z_size, x_size, y_size, get_obstacle_coordinates(random_obstacles))
+        annotated_map.abstract_space(num_clusters)
+        annotated_map.prune_entrances()
+        annotated_map.link_entrances()
+        annotated_map.reduce_entryways(10)
+            
     ####-------- GRAPH 
-    """I need to cache this to a database and query it to reduce start up costs"""
-    graph = Graph(annotated_map)
-    graph.build_graph()    
-    connections = graph.build_intra_edges()
-       
-    
-    #%% testing the search -> refactor this                  
-    ## connecting the start and goal point to the abstract map
-    start_location = [2,2,2]
-    goal_location = [9,6,0]
-    
-    graph.insert_temp_nodes(start_location, 1, start_location)
-    graph.insert_temp_nodes(goal_location, 1, goal_location)
-    
-    #%% test to get sets and see if nodes and edges are connected]
-    start_connections = graph.graph[str(start_location)]
-    goal_connections = graph.graph[str(goal_location)]
+    """I need to cache this to a database and query it to reduce start up costs
+    I should save the information about the ostacles as well or maybe annoted map"""
+    if load_graph == True:
+        random_obstacles  = annotated_map._static_obstacles
+        #obst_coords = get_obstacle_coordinates(random_obstacles)
+        graph = Graph(annotated_map, load_graph)
+    else:    
+        graph = Graph(annotated_map, load_graph)
+        graph.build_graph()    
+        graph.build_intra_edges()        
+        set_obstacles_to_grid(grid=annotated_map, obstacle_list=random_obstacles)
         
-    #%% Astar as graph search 
-
-    #### ASTAR graph search
-    astar_test_graph = graph.graph
-    astar_graph = AstarGraph(astar_test_graph, start_location, goal_location)
-    path_home = astar_graph.main()
+    # %% Trying to save all the information about the   
+    # https://stackoverflow.com/questions/4529815/saving-an-object-data-persistence
+    # def save_object(obj, filename):
+    #     with open(filename, 'wb') as outp:  # Overwrites any existing file.
+    #         pickle.dump(obj, outp, pickle.HIGHEST_PROTOCOL)
+    
+    save_object(graph.graph, 'test.pkl')
+    save_object(random_obstacles, 'obstacles.pkl')    
+    save_object(annotated_map, 'map_test.pkl')
+    
+    # with open('test.pkl', 'rb') as f:
+    #     test_data = pickle.load(f)
+    
+    # with open('map_test.pkl', 'rb') as f:
+    #     test_map = pickle.load(f)
     
     
-    #%% Refine searches begin low level search
-    #def __init__(self, grid, obs_list,start, goal, col_bubble, weight_factor)
+    #%% Reservation Table
+    """
+    For new uavs insert these temp nodes into the graph
+    plan abstract graph via AstarGraph:
+        if corridor is closed don't conside this an option 
+        done by checking current possible node
+        if node exists in this reservation table don't use this 
+    Keep track of flight paths of UAVS 
+    Put as "dynamic obstacle"
+    When planing lowastar consider these dynamic obstacles
+    If uav has left quadrant we can pop up off these dynamic obstacles
+    """    
+    
+    def get_abstract_path(start_location, goal_location, reservation_table,graph):
+        """plans abstract uav abstract path and returns abstract path home
+        Improvements if can't find abstract path then I should look at another solution?
+        how would that work?? easiest way is to  tell it to standby probably return a continue
+        """
+        graph.insert_temp_nodes(start_location, 1, start_location)
+        graph.insert_temp_nodes(goal_location, 1, goal_location)
+        gc.collect()
+        astar_graph = AstarGraph(astar_test_graph, reservation_table, start_location, goal_location, 0.01)
+        abstract_pathways = astar_graph.main()
+        return abstract_pathways
+    
+    def get_refine_path(graph, abstract_path, reservation_table, obstacle_coords):
+        """get refined path for locations -> should use a set for obst coords"""
+        waypoint_coords = []
+        gc.collect()
+        for i in range(len(abstract_path)):
+            if i+1>= len(abstract_path):
+                return waypoint_coords
+            lowastar = AstarLowLevel(
+                graph, reservation_table, obst_coords,
+                abstract_path[i], abstract_path[i+1], 4.5, 10
+                )
+            
+            waypoints = lowastar.main()
+            
+            if isinstance(waypoints[0], list): 
+                waypoint_coords.extend(waypoints[0])
+            else:
+                return waypoint_coords
+                
+    def add_to_reservation_table(path_list, path_reservation_table):
+        """add paths to reservation list"""
+        for path in path_list:
+            reservation_table.add(tuple(path))  
+            
+    def generate_random_uav_coordinates(radius, x_bounds, y_bounds,  z_bounds, n_coords, obst_set):
+        """generates random coordinates for uavs based on x bound, y bound, z bound
+        and how many uavs you want and their proximity to each other"""
+        # Generate a set of all points within 200 of the origin, to be used as offsets later
+        # There's probably a more efficient way to do this.
+        n_coords
+        deltas = set()
+        for x in range(-radius, radius+1):
+            for y in range(-radius, radius+1):
+                for z in range(-radius, radius+1):
+                    if x*x + y*y+ z*z <= radius*radius:
+                        if (x,y,z) in obst_set:
+                            continue
+                        else:
+                            deltas.add((x,y,z))
+                            
+        randPoints = []
+        excluded = set()
+        i = 0
+        while i<n_coords:
+            x = random.randrange(x_bounds[0], x_bounds[1])
+            y = random.randrange(y_bounds[0], y_bounds[1])
+            z = random.randint(z_bounds[0], z_bounds[1])
+            if (x,y,z) in excluded or (x,y,z) in obst_set: 
+                continue
+            randPoints.append([x,y,z])
+            i += 1
+            excluded.update((x+dx, y+dy, z+dy) for (dx,dy,dz) in deltas)
+        
+        return randPoints
+            
     test_grid = annotated_map._Map__grid
-    obst_coords = get_obstacle_coordinates(random_obstacles)
-    waypoint_coords = []
-    for i in range(len(path_home)):
-        if i+1>= len(path_home):
-            print("at the end")
-            break 
-        lowastar = Astar(test_grid, obst_coords, path_home[i], path_home[i+1], 0.5, 1)
-        waypoints = lowastar.main()
-        
-        if waypoints:
-            waypoint_coords.extend(waypoints[0])
-        
-        
-     #%% Plotting stuff
-    from plot_situation import PlotSituation
+    astar_test_graph = graph.graph
+    obst_coords = annotated_map._Map__obstacles #i don't know why this is private
     
-    #plt.close('all')
-    plt_situation = PlotSituation(annotated_map, random_obstacles)
+    ##begin adding uavs in to the system
+    obst_set = set(tuple(x) for x in obst_coords)
+    x_bounds = [1,49]
+    y_bounds = [1,49]
+    z_bounds = [5,40]
+    n_uavs = 40
+    
+    random_coords = generate_random_uav_coordinates(8, x_bounds, y_bounds, z_bounds, n_uavs*2, obst_set)
+    start_location = random_coords[0::2]
+    goal_location = random_coords[1::2]
+    # start_location = [[1,6,2],[8,8,4], [9,9,2]]
+    # goal_location = [[6,9,4], [7,5,3], [7,7,9]]    
+    
+    #%% Testing out multiple uav path plannign
+    from operator import add, sub
+    reservation_table = set()
+    overall_paths = []
+    abstract_paths = []
+    
+    for start,goal in zip(start_location, goal_location):        
+        ops = (add,sub)
+        op = random.choice(ops) 
+        #goal[2] = start[2] - random.choice((1,20))
+        goal[2] = op(start[2], random.choice((1,15)))        
+        
+        if goal[2] > 40:
+            goal[2] = 39
+        if goal[2] < 0:
+            goal[2] = 2
+        
+        cluster_start = graph.determine_cluster(start)
+        cluster_goal = graph.determine_cluster(goal)
+        #print("searching path for", start, goal)
+        
+        if cluster_start == cluster_goal:
+            abstract_path = [start,goal]
+            waypoint_coords = get_refine_path(test_grid, abstract_path,reservation_table, obst_coords)
+        else:
+            graph.insert_temp_nodes(start, 1, start)
+            graph.insert_temp_nodes(goal, 1, goal)
+            abstract_path = get_abstract_path(start, goal, reservation_table, graph)
+            waypoint_coords = get_refine_path(test_grid, abstract_path,reservation_table, obst_coords)
+            add_to_reservation_table(abstract_path, reservation_table)
+        
+        
+        add_to_reservation_table(waypoint_coords, reservation_table)
+        abstract_paths.append(abstract_path)
+        overall_paths.append(waypoint_coords)
+    
+    
+    #%% Plotting stuff
+    from plot_situation import PlotSituation
+    import matplotlib.pyplot as plt
+    
+    plt.close('all')
+    plt_situation = PlotSituation(annotated_map, obst_coords)
+    #plt_situation.plot_inter_nodes(graph)
     plt_situation.plot_config_space()
-    plt_situation.plot_nodes(graph)
-    plt_situation.plot_abstract_path(path_home, graph, 'black')
-    plt_situation.plot_abstract_path(waypoint_coords, graph, 'blue')
+    #plt_situation.plot_nodes(graph)
+    ## should include plots to show all the abstract paths 
+    #plt_situation.plot_abstract_path(overall_paths[1], graph, 'blue')
+    plt_situation.plot_overall_paths(abstract_paths, graph, 'black')
+    plt_situation.plot_overall_paths(overall_paths, graph, 'blue')
     # cluster_00 = annotated_map.cluster_dict["[0, 0]"]
     # cluster_01 = annotated_map.cluster_dict["[0, 1]"]
     # cluster_10 = annotated_map.cluster_dict["[1, 0]"]
     # cluster_11 = annotated_map.cluster_dict["[1, 1]"]
 
 
-    # connections = test_permuations(graph)
-    #plt_situation.plot_quadrant(graph, connections)
-    
-    # plot_cluster_region(cluster_0, random_obstacles)
-    # plot_cluster_region(cluster_1, random_obstacles)    
     
     

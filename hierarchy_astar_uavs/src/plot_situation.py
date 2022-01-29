@@ -38,9 +38,9 @@ class PlotSituation():
     
     def __plot_static_obstacles(self, ax):
         for obstacle in self.obstacle_list:
-            obstacle_z_list = obstacle.z_list
-            for obstacle_z in obstacle_z_list:
-               ax.scatter(obstacle.x, obstacle.y, obstacle_z, color='red')
+            #obstacle_z_list = obstacle.z_list
+            #for obstacle_z in obstacle_z_list:
+            ax.scatter(obstacle[0], obstacle[1], obstacle[2], color='red')
         
     def plot_config_space(self):
         """just plotting the configuration space"""
@@ -150,7 +150,8 @@ class PlotSituation():
         z_val = [z[2] for z in coordinates]
         ax.plot(x_val, y_val, z_val, color=color_list[0])
 
-    def plot_inter_nodes(self,graph,ax):
+    def plot_inter_nodes(self,graph):
+        fig, ax  = self.__set_axis()
         node_dict = graph.graph
         node_keys = node_dict.keys()
         node_locations = self.__extract_keys(node_keys)
@@ -171,13 +172,13 @@ class PlotSituation():
         show the regions and entryways I have to go through"""
         fig ,ax = self.__set_axis()
 
-        self.plot_inter_nodes(graph, ax)
-        
+        #self.plot_inter_nodes(graph, ax)
+        self.__plot_static_obstacles(ax)
         #plot start and stop points
         start_end_size = 50
         start_points = path_list[0]
         end_points = path_list[-1]
-        ax.scatter3D(start_points[0], start_points[1], start_points[2], color="red", marker='o',
+        ax.scatter3D(start_points[0], start_points[1], start_points[2], color="cyan", marker='o',
                     s=start_end_size)
         ax.scatter3D(end_points[0], end_points[1], end_points[2], color="green", marker='^',
                     s=start_end_size)
@@ -188,8 +189,36 @@ class PlotSituation():
         x_val = [x[0] for x in path_coords]
         y_val = [y[1] for y in path_coords]
         z_val = [z[2] for z in path_coords]
-        print("path list is ", path_list)
         ax.plot(x_val, y_val, z_val, color=str(color))
+        
+                
+   
+    def plot_overall_paths(self, overall_path, graph, color):
+        """plots the abstract from the waypoints assigned
+        show the regions and entryways I have to go through"""
+        fig ,ax = self.__set_axis()
+
+        #self.plot_inter_nodes(graph, ax)
+        self.__plot_static_obstacles(ax)
+        #plot start and stop points
+
+        for path_list in overall_path:
+            path_coords = []
+            for path in path_list:
+                start_end_size = 50
+                start_points = path_list[0]
+                end_points = path_list[-1]
+                ax.scatter3D(start_points[0], start_points[1], start_points[2], color="cyan", marker='o',
+                            s=start_end_size)
+                ax.scatter3D(end_points[0], end_points[1], end_points[2], color="green", marker='^',
+                            s=start_end_size)
+                path_coords.append(path)
+            x_val = [x[0] for x in path_coords]
+            y_val = [y[1] for y in path_coords]
+            z_val = [z[2] for z in path_coords]
+            ax.plot(x_val, y_val, z_val, color=str(color))
+        
+    
 
 
 

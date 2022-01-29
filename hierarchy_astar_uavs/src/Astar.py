@@ -63,7 +63,7 @@ class Astar():
         self.grid_z, self.grid_x, self.grid_y = grid.shape
         self.start = start
         self.goal = goal
-        print("starting", start, goal)
+        #print("starting", start, goal)
         self.collision_bubble = col_bubble
         self.weight_factor = weight_factor
         # self.height_boundary = 20
@@ -153,7 +153,9 @@ class Astar():
                   [-ss, ss, 0 ], #go back right
                   [-ss, -ss, 0], #go back left
                   [ 0, ss , ss], #go up z 
-                  [ 0, ss, -ss]] # go down z
+                  [ 0, ss, -ss],
+                  [ 0, 0, -ss] #go up z 
+                  ] # go down z
         
         self.init_node()
         
@@ -162,8 +164,8 @@ class Astar():
         while not self.openset.empty():
             count = count + 1
             
-            if count >= 10000:
-                print("iterations too much")
+            if count >= 4000:
+                print("iterations too much for regular Astar")
                 return None, count, self.closedset 
             
             #pop node off from priority queue and add into closedset
@@ -174,7 +176,7 @@ class Astar():
             if current_node.position == self.end_node.position:
                 #print("Goal reached", current_node.position)
                 path = self.return_path(current_node, self.grid)
-                print("success!", count)
+                #print("success!", count)
                 return path, count, self.closedset
   
             #move generation
@@ -213,7 +215,7 @@ class Astar():
                     continue
                 
                 if abs(current_node.position[2] - child.position[2]) == 1:
-                    penalty = 1.15
+                    penalty = 1.05
                     #print("penalty", penalty)
                 else:
                     penalty = 1                                                 
@@ -245,11 +247,15 @@ class Astar():
                 
 
 class AstarGraph():
-    def __init__(self, graph, start_location, end_location):
+    def __init__(self, graph, reservation_table, start_location, end_location, collision_bubble):
         self.graph = graph
+        self.reservation_table = reservation_table
+        
+        self.reservation_list = list(reservation_table)
+        
         self.start_location = start_location
         self.end_location = end_location
-        
+        self.collision_bubble = collision_bubble 
         self.openset = PriorityQueue() # priority queue
         self.closedset = {}
         self.iter_limit = 4000 #this is stupid should be a paramter
@@ -267,6 +273,14 @@ class AstarGraph():
         """check if we have arrived at the goal"""
         if current_position == self.end_location:
             return True
+
+
+    def __find_closest_obstacle(self, obstacles, current_position):
+        """find closest obstacle from obstacle list, wrt current position"""
+        tree = spatial.KDTree(obstacles)
+        dist, obst_index = tree.query(current_position)   
+        
+        return dist, obst_index
 
     def __return_path_to_goal(self, current_node):
         """return path to starts"""
@@ -302,9 +316,12 @@ class AstarGraph():
                             ((position[2] - goal[2]) ** 2))
         
         return distance
-        
-        return distance
-        
+    
+    def is_collision(self,distance):
+        """check if there is a collision if so return True"""
+        if distance <= self.collision_bubble:
+            return True
+    
     def main(self):
         """main implementation"""
         self.__init_nodes()
@@ -329,11 +346,20 @@ class AstarGraph():
             current_node_position = self.__unpack_tuple_coordinates(current_node.position)
             neighbors = self.graph[str(current_node_position)]
             for neighbor in neighbors:
+                #check collision bubble here
+                if self.reservation_list:
+                    dist, obst_index = self.__find_closest_obstacle(self.reservation_list, neighbor.location)
+                    if self.is_collision(dist):
+                        #print("collision")
+                        continue
                 
                 if neighbor.location == current_node_position:
                     continue
                 
                 if str(neighbor.location) in self.closedset:
+                    continue
+                
+                if tuple(neighbor.location) in self.reservation_table:
                     continue
                 
                 #make new node
@@ -348,14 +374,15 @@ class AstarLowLevel():
     """might need to refactor the original Astar to include some set things
     or inherit from original Astar and use polymorphism for weaker post condition
     stronger postcondition constraints"""
-    def __init__(self, grid, obs_list,start, goal, col_bubble, weight_factor):
+    def __init__(self, grid, reservation_table, obs_list,start, goal, col_bubble, weight_factor):
         self.grid = grid
         self.grid_z, self.grid_x, self.grid_y = grid.shape
         self.start = start
         self.goal = goal
-        print("starting", start, goal)
+        #print("starting", start, goal)
         self.collision_bubble = col_bubble
         self.weight_factor = weight_factor
+        self.reservation_table = reservation_table
         # self.height_boundary = 20
         # self.ground_boundary = 5
         
@@ -446,10 +473,7 @@ class AstarLowLevel():
                   [ 0, -ss, ss], #go up z move left
                   [ ss, ss, ss], #go up z move forward move left
                   [ 0, -ss, ss],
-                  [ 0, ss , -ss], #go down z move right 
-                  [ 0, -ss, -ss], #go down z move left
-                  [ ss, ss, -ss], #go down z move forward move left
-                  [ 0, -ss, -ss],  
+                  [ 0, 0, -ss],  
                   ] # go down z
         
         self.init_node()
@@ -459,8 +483,8 @@ class AstarLowLevel():
         while not self.openset.empty():
             count = count + 1
             
-            if count >= 4000:
-                print("iterations too much")
+            if count >= 5000:
+                print("iterations too much for low level")
                 return None, count, self.closedset 
             
             #pop node off from priority queue and add into closedset
@@ -471,7 +495,7 @@ class AstarLowLevel():
             if current_node.position == self.end_node.position:
                 #print("Goal reached", current_node.position)
                 path = self.return_path(current_node, self.grid)
-                print("success!", count)
+                #print("success!", count)
                 return path, count, self.closedset
   
             #move generation
@@ -496,6 +520,10 @@ class AstarLowLevel():
                     #print("collision")
                     continue
                 
+                if tuple(node_position) in self.reservation_table:
+                    #print("its in the low level reservation table")
+                    continue
+                
                 #create new node
                 new_node = Node(current_node, node_position)
                 
@@ -510,7 +538,7 @@ class AstarLowLevel():
                     continue
                 
                 if abs(current_node.position[2] - child.position[2]) == 1:
-                    penalty = 1.0
+                    penalty = 1.15
                     #print("penalty", penalty)
                 else:
                     penalty = 1                                                 
@@ -527,7 +555,7 @@ class AstarLowLevel():
                     child.f = child.g + (child.h *penalty*dynamic_weight)
                     #print(child.f)
                 else:
-                    dynamic_weight = 15
+                    dynamic_weight = self.weight_factor
                     cost = self.compute_euclidean(current_node.position, child)
                     #print(current_node.g)
                     child.g = current_node.g + 1
