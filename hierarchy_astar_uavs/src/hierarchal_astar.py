@@ -225,7 +225,7 @@ class Map():
             print("no bueno")
             
 class Graph():
-    def __init__(self, configuration_map, load_data):
+    def __init__(self, configuration_map, load_data, graph_pkl_name):
         """
         load data boolean gives me the condition to either load pre generated graph to reduce 
         start up costs
@@ -235,7 +235,7 @@ class Graph():
             Need to refactor this line to allower the user to specify the pkl 
             file location
             """
-            with open('test.pkl', 'rb') as f:
+            with open(graph_pkl_name, 'rb') as f:
                 self.graph = pickle.load(f)
         else:
             self.graph = {}
@@ -599,13 +599,6 @@ def generate_random_obstacles(n_random, bound_lim, z_obs_height):
                                                 z_final=z_obs_height))
     
     return random_static_obstacles
-
-def generate_obstacles(bound_lim, z_obs_height):
-    for x,y in zip(x_random, y_random):
-        random_static_obstacles.append(Obstacle(x_loc=x, y_loc=y, z_init=0,\
-                                                z_final=z_obs_height))
-    
-    return random_static_obstacles
     
 def set_obstacles_to_grid(grid, obstacle_list):
     """define obstacles"""
@@ -621,25 +614,26 @@ def get_obstacle_coordinates(obstacles):
             
     return obst_coords
 
-def test_permuations(graph):
-    intra_connections = []
-    test = graph.graph
-    vals = test['[9, 4, 1]']
-    print("location is",  [9,4,1])
-    for val in vals:
-        if val.node_type == "INTRA":
-            print(val.location, val.node_type)
-            intra_connections.append(val.location)
-            
-    return intra_connections
-
 # https://stackoverflow.com/questions/4529815/saving-an-object-data-persistence
 def save_object(obj, filename):
     with open(filename, 'wb') as outp:  # Overwrites any existing file.
         pickle.dump(obj, outp, pickle.HIGHEST_PROTOCOL)
 
+def build_map(num_obstacles, x_size, y_size, z_size, z_obs_height, num_clusters, num_entryways):
+    """builds map or configuration space"""
+    random_obstacles = generate_random_obstacles(n_random=num_obstacles, bound_lim=x_size, z_obs_height=z_obs_height)
+    annotated_map = Map(z_size, x_size, y_size, get_obstacle_coordinates(random_obstacles))
+    annotated_map.abstract_space(num_clusters)
+    annotated_map.prune_entrances()
+    annotated_map.link_entrances()
+    annotated_map.reduce_entryways(num_entryways)
+    
+    return annotated_map
+
 #%% Run main functions
 if __name__=='__main__':
+    
+    ## PARAMS
     x_size = 50
     y_size = 50
     z_size = 50
@@ -647,21 +641,27 @@ if __name__=='__main__':
     z_obs_height = 10
     num_clusters = 4
     
-    
     load_map = True
     load_graph = True
     
+    map_pkl_name = 'map_test.pkl'
+    graph_pkl_name = 'test.pkl'
+    
+    
+    save_information = False
+
     if load_map == True:
-        with open('map_test.pkl', 'rb') as f:
+        with open(map_pkl_name, 'rb') as f:
             annotated_map  = pickle.load(f)
     else:
         ##### CONFIGURATION SPACE
-        random_obstacles = generate_random_obstacles(n_random=3, bound_lim=x_size, z_obs_height=z_obs_height)
-        annotated_map = Map(z_size, x_size, y_size, get_obstacle_coordinates(random_obstacles))
-        annotated_map.abstract_space(num_clusters)
-        annotated_map.prune_entrances()
-        annotated_map.link_entrances()
-        annotated_map.reduce_entryways(10)
+        build_map(3, x_size, y_size, z_size, z_obs_height, num_clusters, 10)
+        # random_obstacles = generate_random_obstacles(n_random=3, bound_lim=x_size, z_obs_height=z_obs_height)
+        # annotated_map = Map(z_size, x_size, y_size, get_obstacle_coordinates(random_obstacles))
+        # annotated_map.abstract_space(num_clusters)
+        # annotated_map.prune_entrances()
+        # annotated_map.link_entrances()
+        # annotated_map.reduce_entryways(10)
             
     ####-------- GRAPH 
     """I need to cache this to a database and query it to reduce start up costs
@@ -669,9 +669,9 @@ if __name__=='__main__':
     if load_graph == True:
         random_obstacles  = annotated_map._static_obstacles
         #obst_coords = get_obstacle_coordinates(random_obstacles)
-        graph = Graph(annotated_map, load_graph)
+        graph = Graph(annotated_map, load_graph, graph_pkl_name)
     else:    
-        graph = Graph(annotated_map, load_graph)
+        graph = Graph(annotated_map, load_graph, graph_pkl_name)
         graph.build_graph()    
         graph.build_intra_edges()        
         set_obstacles_to_grid(grid=annotated_map, obstacle_list=random_obstacles)
@@ -682,10 +682,12 @@ if __name__=='__main__':
     #     with open(filename, 'wb') as outp:  # Overwrites any existing file.
     #         pickle.dump(obj, outp, pickle.HIGHEST_PROTOCOL)
     
-    save_object(graph.graph, 'test.pkl')
-    save_object(random_obstacles, 'obstacles.pkl')    
-    save_object(annotated_map, 'map_test.pkl')
     
+    if save_information == True:
+        save_object(graph.graph, 'test.pkl')
+        save_object(random_obstacles, 'obstacles.pkl')    
+        save_object(annotated_map, 'map_test.pkl')
+        
     # with open('test.pkl', 'rb') as f:
     #     test_data = pickle.load(f)
     
@@ -727,10 +729,13 @@ if __name__=='__main__':
                 return waypoint_coords
             lowastar = AstarLowLevel(
                 graph, reservation_table, obst_coords,
-                abstract_path[i], abstract_path[i+1], 4.5, 10
+                abstract_path[i], abstract_path[i+1], 4.5, 15
                 )
             
             waypoints = lowastar.main()
+            
+            if not waypoints:
+                return []
             
             if isinstance(waypoints[0], list): 
                 waypoint_coords.extend(waypoints[0])
@@ -740,7 +745,7 @@ if __name__=='__main__':
     def add_to_reservation_table(path_list, path_reservation_table):
         """add paths to reservation list"""
         for path in path_list:
-            reservation_table.add(tuple(path))  
+            path_reservation_table.add(tuple(path))  
             
     def generate_random_uav_coordinates(radius, x_bounds, y_bounds,  z_bounds, n_coords, obst_set):
         """generates random coordinates for uavs based on x bound, y bound, z bound
@@ -779,52 +784,96 @@ if __name__=='__main__':
     
     ##begin adding uavs in to the system
     obst_set = set(tuple(x) for x in obst_coords)
-    x_bounds = [1,49]
-    y_bounds = [1,49]
-    z_bounds = [5,40]
+    x_bounds = [1,x_size-1]
+    y_bounds = [1,y_size-1]
+    z_bounds = [5,z_size-1]
     n_uavs = 40
+    spacing = 8
     
-    random_coords = generate_random_uav_coordinates(8, x_bounds, y_bounds, z_bounds, n_uavs*2, obst_set)
+    random_coords = generate_random_uav_coordinates(spacing, x_bounds, y_bounds, z_bounds, n_uavs*2, obst_set)
     start_location = random_coords[0::2]
     goal_location = random_coords[1::2]
-    # start_location = [[1,6,2],[8,8,4], [9,9,2]]
-    # goal_location = [[6,9,4], [7,5,3], [7,7,9]]    
+    
+    
+    #%% How to package this together??
+    from operator import add, sub
+    def begin_hierarchical_search(start_location, goal_location, graph, grid, reservation_table, obst_coords):
+        """begin hierarrical search"""
+        reservation_table = set()
+        overall_paths = []
+        abstract_paths = []
+        z_size, x_size, y_size = grid.shape
+        
+        for start,goal in zip(start_location, goal_location):        
+            ops = (add,sub)
+            op = random.choice(ops) 
+            goal[2] = op(start[2], random.choice((1,15)))        
+            
+            if goal[2] > z_size - 1:
+                goal[2] = z_size -1
+            if goal[2] < 0:
+                goal[2] = 2
+            
+            cluster_start = graph.determine_cluster(start)
+            cluster_goal = graph.determine_cluster(goal)
+            #print("searching path for", start, goal)
+            
+            if cluster_start == cluster_goal:
+                abstract_path = [start,goal]
+                waypoint_coords = get_refine_path(test_grid, abstract_path,reservation_table, obst_coords)
+            else:
+                graph.insert_temp_nodes(start, 1, start)
+                graph.insert_temp_nodes(goal, 1, goal)
+                abstract_path = get_abstract_path(start, goal, reservation_table, graph)
+                waypoint_coords = get_refine_path(test_grid, abstract_path,reservation_table, obst_coords)
+                add_to_reservation_table(abstract_path, reservation_table)
+            
+            
+            add_to_reservation_table(waypoint_coords, reservation_table)
+            abstract_paths.append(abstract_path)
+            overall_paths.append(waypoint_coords)
+            
+        return abstract_paths, overall_paths, reservation_table
+    
+    reservation_table  = set()
+    
+    abstract_path, overall_paths, reservation_table = begin_hierarchical_search(
+        start_location, goal_location, graph, test_grid, reservation_table, obst_coords)
     
     #%% Testing out multiple uav path plannign
-    from operator import add, sub
-    reservation_table = set()
-    overall_paths = []
-    abstract_paths = []
+    # from operator import add, sub
+    # reservation_table = set()
+    # overall_paths = []
+    # abstract_paths = []
     
-    for start,goal in zip(start_location, goal_location):        
-        ops = (add,sub)
-        op = random.choice(ops) 
-        #goal[2] = start[2] - random.choice((1,20))
-        goal[2] = op(start[2], random.choice((1,15)))        
+    # for start,goal in zip(start_location, goal_location):        
+    #     ops = (add,sub)
+    #     op = random.choice(ops) 
+    #     goal[2] = op(start[2], random.choice((1,15)))        
         
-        if goal[2] > 40:
-            goal[2] = 39
-        if goal[2] < 0:
-            goal[2] = 2
+    #     if goal[2] > x_bounds[1]:
+    #         goal[2] = x_bounds[1]-1
+    #     if goal[2] < 0:
+    #         goal[2] = 2
         
-        cluster_start = graph.determine_cluster(start)
-        cluster_goal = graph.determine_cluster(goal)
-        #print("searching path for", start, goal)
+    #     cluster_start = graph.determine_cluster(start)
+    #     cluster_goal = graph.determine_cluster(goal)
+    #     #print("searching path for", start, goal)
         
-        if cluster_start == cluster_goal:
-            abstract_path = [start,goal]
-            waypoint_coords = get_refine_path(test_grid, abstract_path,reservation_table, obst_coords)
-        else:
-            graph.insert_temp_nodes(start, 1, start)
-            graph.insert_temp_nodes(goal, 1, goal)
-            abstract_path = get_abstract_path(start, goal, reservation_table, graph)
-            waypoint_coords = get_refine_path(test_grid, abstract_path,reservation_table, obst_coords)
-            add_to_reservation_table(abstract_path, reservation_table)
+    #     if cluster_start == cluster_goal:
+    #         abstract_path = [start,goal]
+    #         waypoint_coords = get_refine_path(test_grid, abstract_path,reservation_table, obst_coords)
+    #     else:
+    #         graph.insert_temp_nodes(start, 1, start)
+    #         graph.insert_temp_nodes(goal, 1, goal)
+    #         abstract_path = get_abstract_path(start, goal, reservation_table, graph)
+    #         waypoint_coords = get_refine_path(test_grid, abstract_path,reservation_table, obst_coords)
+    #         add_to_reservation_table(abstract_path, reservation_table)
         
         
-        add_to_reservation_table(waypoint_coords, reservation_table)
-        abstract_paths.append(abstract_path)
-        overall_paths.append(waypoint_coords)
+    #     add_to_reservation_table(waypoint_coords, reservation_table)
+    #     abstract_paths.append(abstract_path)
+    #     overall_paths.append(waypoint_coords)
     
     
     #%% Plotting stuff
@@ -838,7 +887,7 @@ if __name__=='__main__':
     #plt_situation.plot_nodes(graph)
     ## should include plots to show all the abstract paths 
     #plt_situation.plot_abstract_path(overall_paths[1], graph, 'blue')
-    plt_situation.plot_overall_paths(abstract_paths, graph, 'black')
+    plt_situation.plot_overall_paths(abstract_path, graph, 'black')
     plt_situation.plot_overall_paths(overall_paths, graph, 'blue')
     # cluster_00 = annotated_map.cluster_dict["[0, 0]"]
     # cluster_01 = annotated_map.cluster_dict["[0, 1]"]
