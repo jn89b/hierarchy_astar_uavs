@@ -204,7 +204,10 @@ class PlotSituation():
 
         for path_list in overall_path:
             path_coords = []
+            if isinstance(path_list, int):
+                continue
             for path in path_list:
+
                 start_end_size = 50
                 start_points = path_list[0]
                 end_points = path_list[-1]

@@ -20,6 +20,7 @@ import time
 import gc
 import heapq
 import pickle
+from operator import add, sub
 
 class Map():
     """
@@ -179,9 +180,10 @@ class Map():
                 if n_numbers == 0:
                     continue
                 for i, coordinates in enumerate(entrances[:]):
-                    if (i % n_numbers) != 0:
+                    if (i % n_numbers) != 0 or (coordinates[2] % n_numbers) != 0:
                         #print("coordinates are", i, coordinates)
                         entrances.remove(coordinates)
+
 
     def abstract_space(self, n_clusters):
         """generate clusters based on some number you want does it into 
@@ -283,8 +285,9 @@ class Graph():
                                      , product(inner_connections[1], inner_connections[0])):
                 inner_sets.append(r)
                 
-            intra_connections_list = self.__remove_coords_diff_depth(inner_sets)
-            #intra_connections_list = inner_sets
+            """comment one of the other the last one looks at all connections"""
+            #intra_connections_list = self.__remove_coords_diff_depth(inner_sets)
+            intra_connections_list = inner_sets
             
             #this is a test to reduce the grid
             if idx == 4:
@@ -325,7 +328,7 @@ class Graph():
         #added a garbage collection to remove clutter since this function will be used 
         gc.collect()
         astar = Astar(cluster_space, obstacle_coords, start_position,
-                      goal_position, 0.5 , 5)
+                      goal_position, 0.5 , 4.5)
     
         path_list = astar.main()
         #print("path list is", path_list[0])
@@ -431,7 +434,7 @@ class Graph():
     def connect_to_border(self,node, key_name):
         """connect borders to the map, I should have this in the graph class but define the key value
         so set key to start and goal to make it temporary"""
-        offset_limit = 10
+        offset_limit = 10 #this is dumb should have this parameterized
         height_bounds = [node.location[2]-offset_limit, node.location[2]+offset_limit]
         mapped_entrances_start = graph.map.cluster_dict[str(node.cluster_coord)].mapped_entrances
         
@@ -630,38 +633,159 @@ def build_map(num_obstacles, x_size, y_size, z_size, z_obs_height, num_clusters,
     
     return annotated_map
 
+def get_abstract_path(start_location, goal_location, reservation_table,graph):
+    """plans abstract uav abstract path and returns abstract path home
+    Improvements if can't find abstract path then I should look at another solution?
+    how would that work?? easiest way is to  tell it to standby probably return a continue
+    """
+    graph.insert_temp_nodes(start_location, 1, start_location)
+    graph.insert_temp_nodes(goal_location, 1, goal_location)
+    gc.collect()
+    astar_graph = AstarGraph(graph.graph, reservation_table, start_location, goal_location, 0.01)
+    abstract_pathways = astar_graph.main()
+    return abstract_pathways
+
+def get_refine_path(graph, abstract_path, reservation_table, obstacle_coords, 
+                    col_bubble,weighted_h):
+    """get refined path for locations -> should use a set for obst coords"""
+    waypoint_coords = []
+    
+    if isinstance(abstract_path , int):
+        return []
+    
+    for i in range(len(abstract_path)):
+        if i+1>= len(abstract_path):
+            return waypoint_coords
+        lowastar = AstarLowLevel(
+            graph, reservation_table, obst_coords,
+            abstract_path[i], abstract_path[i+1], col_bubble, weighted_h
+            )
+        
+        waypoints = lowastar.main()
+        
+        if not waypoints:
+            return []
+        
+        if isinstance(waypoints[0], list): 
+            waypoint_coords.extend(waypoints[0])
+        else:
+            return waypoint_coords
+            
+def add_to_reservation_table(path_list, path_reservation_table):
+    """add paths to reservation list"""
+    for path in path_list:
+        path_reservation_table.add(tuple(path))  
+        
+def generate_random_uav_coordinates(radius, x_bounds, y_bounds,  z_bounds, n_coords, obst_set):
+    """generates random coordinates for uavs based on x bound, y bound, z bound
+    and how many uavs you want and their proximity to each other"""
+    # Generate a set of all points within 200 of the origin, to be used as offsets later
+    # There's probably a more efficient way to do this.
+    n_coords
+    deltas = set()
+    for x in range(-radius, radius+1):
+        for y in range(-radius, radius+1):
+            for z in range(-radius, radius+1):
+                if x*x + y*y+ z*z <= radius*radius:
+                    if (x,y,z) in obst_set:
+                        continue
+                    else:
+                        deltas.add((x,y,z))
+                        
+    randPoints = []
+    excluded = set()
+    i = 0
+    while i<n_coords:
+        x = random.randrange(x_bounds[0], x_bounds[1])
+        y = random.randrange(y_bounds[0], y_bounds[1])
+        z = random.randint(z_bounds[0], z_bounds[1])
+        if (x,y,z) in excluded or (x,y,z) in obst_set: 
+            continue
+        randPoints.append([x,y,z])
+        i += 1
+        excluded.update((x+dx, y+dy, z+dy) for (dx,dy,dz) in deltas)
+    
+    return randPoints
+            
+
+def begin_higher_search(random_coords, start_list, goal_list, graph, grid, obst_coords,
+                        col_bubble, weighted_h):
+    """begin higher search for n uavs"""
+    reservation_table = set()
+    overall_paths = []
+    abstract_paths = []
+    
+    cnt = 0
+    for start, goal in zip(start_list, goal_list):
+        
+        #randomize operations 
+        ops = (add,sub)
+        op = random.choice(ops) 
+        goal[2] = op(start[2], random.choice((1,40)))
+        
+        if goal[2] > z_bounds[1]:
+            goal[2] = z_bounds[1]-1
+        if goal[2] < 0:
+            goal[2] = 2
+            
+        #print("start and goal",cnt,  start, goal)
+        if cnt % 5 == 0:
+            """sanity check to make sure its printing"""
+            print("start and goal",cnt,  start, goal)
+            
+        #determine regions of coordinates on the cluster
+        cluster_start = graph.determine_cluster(start)
+        cluster_goal = graph.determine_cluster(goal)
+        
+        #check if in same region
+        if cluster_start == cluster_goal:
+            abstract_path = [start,goal]
+            waypoint_coords = get_refine_path(grid, abstract_path,reservation_table, obst_coords,
+                                              col_bubble, weighted_h)
+        else:
+            graph.insert_temp_nodes(start, 1, start)
+            graph.insert_temp_nodes(goal, 1, goal)
+            abstract_path = get_abstract_path(start, goal, reservation_table, graph)
+            waypoint_coords = get_refine_path(grid, abstract_path,reservation_table, obst_coords, 
+                                              col_bubble, weighted_h)
+            if isinstance(abstract_path, int) == False:
+                add_to_reservation_table(abstract_path, reservation_table)
+        
+        cnt+=1
+        gc.collect()
+        add_to_reservation_table(waypoint_coords, reservation_table)
+        abstract_paths.append(abstract_path)
+        overall_paths.append(waypoint_coords)
+        
+        
+    return reservation_table, overall_paths, abstract_paths
+        
+
 #%% Run main functions
 if __name__=='__main__':
     
     ## PARAMS
-    x_size = 50
-    y_size = 50
+    x_size = 100
+    y_size = 100
     z_size = 50
     
-    z_obs_height = 10
+    z_obs_height = 1
     num_clusters = 4
     
     load_map = True
     load_graph = True
+    save_information = True
     
     map_pkl_name = 'map_test.pkl'
     graph_pkl_name = 'test.pkl'
     
-    
-    save_information = False
 
     if load_map == True:
         with open(map_pkl_name, 'rb') as f:
             annotated_map  = pickle.load(f)
     else:
         ##### CONFIGURATION SPACE
-        build_map(3, x_size, y_size, z_size, z_obs_height, num_clusters, 10)
-        # random_obstacles = generate_random_obstacles(n_random=3, bound_lim=x_size, z_obs_height=z_obs_height)
-        # annotated_map = Map(z_size, x_size, y_size, get_obstacle_coordinates(random_obstacles))
-        # annotated_map.abstract_space(num_clusters)
-        # annotated_map.prune_entrances()
-        # annotated_map.link_entrances()
-        # annotated_map.reduce_entryways(10)
+        annotated_map= build_map(3, x_size, y_size, z_size, z_obs_height, num_clusters, 5)
             
     ####-------- GRAPH 
     """I need to cache this to a database and query it to reduce start up costs
@@ -671,29 +795,18 @@ if __name__=='__main__':
         #obst_coords = get_obstacle_coordinates(random_obstacles)
         graph = Graph(annotated_map, load_graph, graph_pkl_name)
     else:    
+        random_obstacles = generate_random_obstacles(1, x_size, z_obs_height)
         graph = Graph(annotated_map, load_graph, graph_pkl_name)
         graph.build_graph()    
         graph.build_intra_edges()        
         set_obstacles_to_grid(grid=annotated_map, obstacle_list=random_obstacles)
         
-    # %% Trying to save all the information about the   
-    # https://stackoverflow.com/questions/4529815/saving-an-object-data-persistence
-    # def save_object(obj, filename):
-    #     with open(filename, 'wb') as outp:  # Overwrites any existing file.
-    #         pickle.dump(obj, outp, pickle.HIGHEST_PROTOCOL)
-    
-    
+    # %% Option to save information of configura tion space and graphs    
     if save_information == True:
         save_object(graph.graph, 'test.pkl')
         save_object(random_obstacles, 'obstacles.pkl')    
         save_object(annotated_map, 'map_test.pkl')
-        
-    # with open('test.pkl', 'rb') as f:
-    #     test_data = pickle.load(f)
-    
-    # with open('map_test.pkl', 'rb') as f:
-    #     test_map = pickle.load(f)
-    
+            
     
     #%% Reservation Table
     """
@@ -708,76 +821,6 @@ if __name__=='__main__':
     If uav has left quadrant we can pop up off these dynamic obstacles
     """    
     
-    def get_abstract_path(start_location, goal_location, reservation_table,graph):
-        """plans abstract uav abstract path and returns abstract path home
-        Improvements if can't find abstract path then I should look at another solution?
-        how would that work?? easiest way is to  tell it to standby probably return a continue
-        """
-        graph.insert_temp_nodes(start_location, 1, start_location)
-        graph.insert_temp_nodes(goal_location, 1, goal_location)
-        gc.collect()
-        astar_graph = AstarGraph(astar_test_graph, reservation_table, start_location, goal_location, 0.01)
-        abstract_pathways = astar_graph.main()
-        return abstract_pathways
-    
-    def get_refine_path(graph, abstract_path, reservation_table, obstacle_coords):
-        """get refined path for locations -> should use a set for obst coords"""
-        waypoint_coords = []
-        gc.collect()
-        for i in range(len(abstract_path)):
-            if i+1>= len(abstract_path):
-                return waypoint_coords
-            lowastar = AstarLowLevel(
-                graph, reservation_table, obst_coords,
-                abstract_path[i], abstract_path[i+1], 4.5, 15
-                )
-            
-            waypoints = lowastar.main()
-            
-            if not waypoints:
-                return []
-            
-            if isinstance(waypoints[0], list): 
-                waypoint_coords.extend(waypoints[0])
-            else:
-                return waypoint_coords
-                
-    def add_to_reservation_table(path_list, path_reservation_table):
-        """add paths to reservation list"""
-        for path in path_list:
-            path_reservation_table.add(tuple(path))  
-            
-    def generate_random_uav_coordinates(radius, x_bounds, y_bounds,  z_bounds, n_coords, obst_set):
-        """generates random coordinates for uavs based on x bound, y bound, z bound
-        and how many uavs you want and their proximity to each other"""
-        # Generate a set of all points within 200 of the origin, to be used as offsets later
-        # There's probably a more efficient way to do this.
-        n_coords
-        deltas = set()
-        for x in range(-radius, radius+1):
-            for y in range(-radius, radius+1):
-                for z in range(-radius, radius+1):
-                    if x*x + y*y+ z*z <= radius*radius:
-                        if (x,y,z) in obst_set:
-                            continue
-                        else:
-                            deltas.add((x,y,z))
-                            
-        randPoints = []
-        excluded = set()
-        i = 0
-        while i<n_coords:
-            x = random.randrange(x_bounds[0], x_bounds[1])
-            y = random.randrange(y_bounds[0], y_bounds[1])
-            z = random.randint(z_bounds[0], z_bounds[1])
-            if (x,y,z) in excluded or (x,y,z) in obst_set: 
-                continue
-            randPoints.append([x,y,z])
-            i += 1
-            excluded.update((x+dx, y+dy, z+dy) for (dx,dy,dz) in deltas)
-        
-        return randPoints
-            
     test_grid = annotated_map._Map__grid
     astar_test_graph = graph.graph
     obst_coords = annotated_map._Map__obstacles #i don't know why this is private
@@ -787,93 +830,57 @@ if __name__=='__main__':
     x_bounds = [1,x_size-1]
     y_bounds = [1,y_size-1]
     z_bounds = [5,z_size-1]
-    n_uavs = 40
-    spacing = 8
-    
-    random_coords = generate_random_uav_coordinates(spacing, x_bounds, y_bounds, z_bounds, n_uavs*2, obst_set)
-    start_location = random_coords[0::2]
-    goal_location = random_coords[1::2]
     
     
-    #%% How to package this together??
-    from operator import add, sub
-    def begin_hierarchical_search(start_location, goal_location, graph, grid, reservation_table, obst_coords):
-        """begin hierarrical search"""
-        reservation_table = set()
-        overall_paths = []
-        abstract_paths = []
-        z_size, x_size, y_size = grid.shape
+    
+    n_uavs = 500
+    spacing = 10
+    
+    random_coords = generate_random_uav_coordinates(
+        spacing, x_bounds, y_bounds, z_bounds, n_uavs*2, obst_set)
+    
+    start_list = random_coords[0::2]
+    goal_list = random_coords[1::2]
+    
+    #%% How to package this together??       
+    """begin search for incoming uavs"""
+    col_bubble = 4.5
+    weighted_h = 15
+    
+    reservation_table, overall_paths, abstract_paths = begin_higher_search(
+                                                    random_coords,
+                                                    start_list, goal_list,
+                                                    graph, test_grid, obst_coords, 
+                                                    col_bubble, weighted_h)
+    
+    #%% 
+    """
+    what to do: 
+        simulate multiple things with monte carlo:
+            randomize location of uavs
+        save information of uav locations
+        save information of map and layouts
+        save information of flight paths
+        save information of abstract flight path
+        save reservation table
+    """
+    
+    def find_total_denials(overall_paths):
+        """return total denial of paths"""
+        cnt = 0
+        for path in overall_paths:
+            if not path:
+                cnt+=1
         
-        for start,goal in zip(start_location, goal_location):        
-            ops = (add,sub)
-            op = random.choice(ops) 
-            goal[2] = op(start[2], random.choice((1,15)))        
-            
-            if goal[2] > z_size - 1:
-                goal[2] = z_size -1
-            if goal[2] < 0:
-                goal[2] = 2
-            
-            cluster_start = graph.determine_cluster(start)
-            cluster_goal = graph.determine_cluster(goal)
-            #print("searching path for", start, goal)
-            
-            if cluster_start == cluster_goal:
-                abstract_path = [start,goal]
-                waypoint_coords = get_refine_path(test_grid, abstract_path,reservation_table, obst_coords)
-            else:
-                graph.insert_temp_nodes(start, 1, start)
-                graph.insert_temp_nodes(goal, 1, goal)
-                abstract_path = get_abstract_path(start, goal, reservation_table, graph)
-                waypoint_coords = get_refine_path(test_grid, abstract_path,reservation_table, obst_coords)
-                add_to_reservation_table(abstract_path, reservation_table)
-            
-            
-            add_to_reservation_table(waypoint_coords, reservation_table)
-            abstract_paths.append(abstract_path)
-            overall_paths.append(waypoint_coords)
-            
-        return abstract_paths, overall_paths, reservation_table
+        return cnt
     
-    reservation_table  = set()
+    def compute_success_percent(overall_paths):
+        """compute overall percent success"""
+        denials = find_total_denials(overall_paths)
+        
+        return abs(len(overall_paths) - denials)/len(overall_paths)
     
-    abstract_path, overall_paths, reservation_table = begin_hierarchical_search(
-        start_location, goal_location, graph, test_grid, reservation_table, obst_coords)
-    
-    #%% Testing out multiple uav path plannign
-    # from operator import add, sub
-    # reservation_table = set()
-    # overall_paths = []
-    # abstract_paths = []
-    
-    # for start,goal in zip(start_location, goal_location):        
-    #     ops = (add,sub)
-    #     op = random.choice(ops) 
-    #     goal[2] = op(start[2], random.choice((1,15)))        
-        
-    #     if goal[2] > x_bounds[1]:
-    #         goal[2] = x_bounds[1]-1
-    #     if goal[2] < 0:
-    #         goal[2] = 2
-        
-    #     cluster_start = graph.determine_cluster(start)
-    #     cluster_goal = graph.determine_cluster(goal)
-    #     #print("searching path for", start, goal)
-        
-    #     if cluster_start == cluster_goal:
-    #         abstract_path = [start,goal]
-    #         waypoint_coords = get_refine_path(test_grid, abstract_path,reservation_table, obst_coords)
-    #     else:
-    #         graph.insert_temp_nodes(start, 1, start)
-    #         graph.insert_temp_nodes(goal, 1, goal)
-    #         abstract_path = get_abstract_path(start, goal, reservation_table, graph)
-    #         waypoint_coords = get_refine_path(test_grid, abstract_path,reservation_table, obst_coords)
-    #         add_to_reservation_table(abstract_path, reservation_table)
-        
-        
-    #     add_to_reservation_table(waypoint_coords, reservation_table)
-    #     abstract_paths.append(abstract_path)
-    #     overall_paths.append(waypoint_coords)
+    print(compute_success_percent(overall_paths))
     
     
     #%% Plotting stuff
@@ -883,17 +890,12 @@ if __name__=='__main__':
     plt.close('all')
     plt_situation = PlotSituation(annotated_map, obst_coords)
     #plt_situation.plot_inter_nodes(graph)
-    plt_situation.plot_config_space()
+    #plt_situation.plot_config_space()
     #plt_situation.plot_nodes(graph)
     ## should include plots to show all the abstract paths 
     #plt_situation.plot_abstract_path(overall_paths[1], graph, 'blue')
-    plt_situation.plot_overall_paths(abstract_path, graph, 'black')
+    plt_situation.plot_overall_paths(abstract_paths, graph, 'black')
     plt_situation.plot_overall_paths(overall_paths, graph, 'blue')
-    # cluster_00 = annotated_map.cluster_dict["[0, 0]"]
-    # cluster_01 = annotated_map.cluster_dict["[0, 1]"]
-    # cluster_10 = annotated_map.cluster_dict["[1, 0]"]
-    # cluster_11 = annotated_map.cluster_dict["[1, 1]"]
-
 
     
     

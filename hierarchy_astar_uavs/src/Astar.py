@@ -260,6 +260,7 @@ class AstarGraph():
         self.closedset = {}
         self.iter_limit = 4000 #this is stupid should be a paramter
         
+
     def __init_nodes(self):
         """initialize start and end location nodes"""
         start_node = Node(None, self.start_location)
@@ -291,7 +292,7 @@ class AstarGraph():
             current = current.parent
         #reverse path
         path_goal = path_goal[::-1]
-        print("path to goal is", path_goal)
+        #print("path to goal is", path_goal)
         
         return path_goal
     
@@ -373,7 +374,16 @@ class AstarGraph():
 class AstarLowLevel():
     """might need to refactor the original Astar to include some set things
     or inherit from original Astar and use polymorphism for weaker post condition
-    stronger postcondition constraints"""
+    stronger postcondition constraints
+    
+    Improvmeents:
+        refactor heuristics by the following:
+            do a gradient iteration
+            change delta z from start to goal:
+                if negative then we want to go up so set cost to go down higher
+                if positive then we want to go down so set cost to up higher
+    
+    """
     def __init__(self, grid, reservation_table, obs_list,start, goal, col_bubble, weight_factor):
         self.grid = grid
         self.grid_z, self.grid_x, self.grid_y = grid.shape
@@ -383,19 +393,22 @@ class AstarLowLevel():
         self.collision_bubble = col_bubble
         self.weight_factor = weight_factor
         self.reservation_table = reservation_table
-        # self.height_boundary = 20
-        # self.ground_boundary = 5
-        
         self.obstacle_list = obs_list
 
         self.openset = PriorityQueue() # priority queue
         self.closedset = {}
 
+        if self.start[2] - self.goal[2] <= 0: 
+            self._determine_penalty = "going down"
+        else:
+            self._determine_penalty = "going up"
+        
+
     def is_collision(self,distance):
         """check if there is a collision if so return True"""
         if distance <= self.collision_bubble:
             return True
-    
+        
     def find_closest_obstacle(self, obstacles, current_position):
         """find closest obstacle from obstacle list, wrt current position"""
         tree = spatial.KDTree(obstacles)
@@ -428,6 +441,26 @@ class AstarLowLevel():
         
         if distance <= 1.5:
             return True
+        
+    def __determine_penalty(self):
+        """determines the penalty of the cost for changing height
+        if want to end at higher position -> penalize going down
+        if want to end at lower position -> penalize going up """
+        
+        if self.start[2] - self.goal[2] <= 0: 
+            return "going down"
+        else:
+            return "going up"
+        
+    def __compute_penalty(self, current_z, new_z):
+        """compute penalty"""
+        diff_z = current_z - new_z 
+        if self._determine_penalty == "going down" and diff_z > 0:
+            return 1.15
+        if self._determine_penalty == "going up" and diff_z < 0:
+            return 1.15
+            
+        return 1.0
         
     #This function return the path of the search
     def return_path(self,current_node, grid):
@@ -484,7 +517,7 @@ class AstarLowLevel():
             count = count + 1
             
             if count >= 5000:
-                print("iterations too much for low level")
+                #print("iterations too much for low level")
                 return None, count, self.closedset 
             
             #pop node off from priority queue and add into closedset
@@ -537,11 +570,15 @@ class AstarLowLevel():
                     #print("Exists", child.position)
                     continue
                 
-                if abs(current_node.position[2] - child.position[2]) == 1:
-                    penalty = 1.15
-                    #print("penalty", penalty)
-                else:
-                    penalty = 1                                                 
+                """refactor this, determine if I am going up or down then 
+                adjust the heuristic"""
+                penalty = self.__compute_penalty(
+                    current_node.position[2],  child.position[2])
+                # if abs(current_node.position[2] - child.position[2]) == 1:
+                #     penalty = 1.1
+                #     #print("penalty", penalty)
+                # else:
+                #     penalty = 1       
                 
                 """Heuristic costs calculated here, this is using eucledian distance"""
                 #print("child.position", child.position)
