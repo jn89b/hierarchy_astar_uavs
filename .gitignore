@@ -1,2 +1,3 @@
 /src/logs/
 *.txt
+*.pkl
