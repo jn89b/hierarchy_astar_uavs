@@ -681,7 +681,7 @@ def get_refine_path(graph, abstract_path, reservation_table, obstacle_coords,
         if isinstance(waypoints[0], list): 
             waypoint_coords.extend(waypoints[0])
         else:
-            print("final iteration", iteration_cnt)
+            #print("final iteration", iteration_cnt)
             return waypoint_coords, iteration_cnt, search_cnt
             
 def add_to_reservation_table(path_list, path_reservation_table):
@@ -731,21 +731,25 @@ def begin_higher_search(random_coords, start_list, goal_list, graph, grid, obst_
     search_space_list = []
     time_list = []
     
+    col_radius = col_bubble/2
+    bubble_bounds = list(np.arange(-col_radius, col_radius+1, 1))
+    
     cnt = 0
     for start, goal in zip(start_list, goal_list):
         
-        #randomize operations 
+        #randomize operations to define z location
         ops = (add,sub)
         op = random.choice(ops) 
         goal[2] = op(start[2], random.choice((1,40)))
         
+        #check to make sure z is not ouf bounds 
         if goal[2] > z_bounds[1]:
             goal[2] = z_bounds[1]-1
         if goal[2] < 0:
             goal[2] = 2
             
         #print("start and goal",cnt,  start, goal)
-        if cnt % 5 == 0:
+        if cnt % 20 == 0:
             """sanity check to make sure its printing"""
             print("start and goal",cnt,  start, goal)
             
@@ -779,12 +783,18 @@ def begin_higher_search(random_coords, start_list, goal_list, graph, grid, obst_
         
         cnt+=1
         gc.collect()
-        add_to_reservation_table(waypoint_coords, reservation_table)
+        
+        #need to add inflation so with each waypoint add +1 -> l collision bubble
+        # for x, y, z then insert to set
+        #add_to_reservation_table(waypoint_coords, reservation_table)
+        insert_inflated_waypoints(waypoint_coords, bubble_bounds , reservation_table)
+        
         abstract_paths.append(abstract_path)
         overall_paths.append(waypoint_coords)
         iter_cnt_list.append(iter_cnt)
         search_space_list.append(search_cnt)
         time_list.append(time_diff)
+        
     return reservation_table, overall_paths, abstract_paths, iter_cnt_list, search_space_list, time_list
         
 def find_total_denials(overall_paths):
@@ -802,61 +812,36 @@ def compute_success_percent(overall_paths):
     
     return abs(len(overall_paths) - denials)/len(overall_paths)
 
-class MonteCarloLogger():
-    """
-    Name the following:
-        - file name as follows:
-            sim_#_n_drones.csv
-        - set file path as well
-        - record dictionary information as follows:
-            - n drones
-            - heuristics
-            - uav flight path based on order of control
-            - success or failure 
-    """
-    def __init__(self):# sim_num, n_drones, dict_db, performance, heuristics):
-        self.save_path = os.getcwd() + "\logs"
-        self.filename = "monte_carlo_sim"
-        self.complete_directory =  os.path.join(self.save_path, self.filename+".csv")
-
-    def convert_info_to_list(self, sim_num, n_drones, dict_db, performance, heuristics):
-        dataframe_list = []
-        for idx, (uav_id, uav) in enumerate(dict_db.items()):
-            uav.set_mission_success(performance)
-            uav.set_heuristics(heuristics)
-            uav.set_sim_num(sim_num)
-            dataframe_list.append(uav.to_dict())
+def insert_inflated_waypoints(waypoint_list,bounds, reservation_table):
+    """insert inflated waypoints"""
+    for waypoint in waypoint_list:
+        inflated_list = inflate_location(waypoint, bounds)
+        reservation_table.update(inflated_list)
         
-        return dataframe_list
-    
-    def write_csv(self,  sim_num, n_drones, dict_db, performance, heuristics):
-        dataframe_list = self.convert_info_to_list(sim_num, n_drones, dict_db, performance, heuristics)
-        keys = dataframe_list[0].keys()
-        filename = "simnum_"+str(sim_num)+"_drones_"+ str(n_drones)
-        complete_directory = os.path.join(self.save_path, filename+".csv")
-        with open( complete_directory, 'w', newline='') as output_file:
-            dict_writer = csv.DictWriter(output_file, keys)
-            dict_writer.writeheader()
-            dict_writer.writerows(dataframe_list)
-        
-        print("recorded information to ", self.complete_directory)
-        
-    def convert_dict_df(self, info_list, column_name):
-        return pd.DataFrame(info_list, columns=[column_name])
-
+def inflate_location(position, bounds):
+    """inflate x,y,z locaiton position based on some bounds"""
+    inflated_list = []
+    """calculate bounds"""
+    for i in bounds:
+        for j in bounds:
+            for k in bounds:
+                new_position = [position[0]+i, position[1]+j, position[2]+k]
+                inflated_list.append(tuple(new_position))
+                
+    return inflated_list
 #%% Run main functions
 if __name__=='__main__':
     
     ## PARAMS
     x_size = 100
     y_size = 100
-    z_size = 50
+    z_size = 75
     
     z_obs_height = 1
     num_clusters = 4
     
-    load_map = True
-    load_graph = True
+    load_map = False
+    load_graph = False
     save_information = True
     
     map_pkl_name = 'map_test.pkl'
@@ -868,7 +853,7 @@ if __name__=='__main__':
             annotated_map  = pickle.load(f)
     else:
         ##### CONFIGURATION SPACE
-        annotated_map= build_map(3, x_size, y_size, z_size, z_obs_height, num_clusters, 5)
+        annotated_map= build_map(3, x_size, y_size, z_size, z_obs_height, num_clusters, 10)
             
     ####-------- GRAPH 
     """I need to cache this to a database and query it to reduce start up costs
@@ -914,19 +899,19 @@ if __name__=='__main__':
     y_bounds = [1,y_size-1]
     z_bounds = [5,z_size-1]
     
-    n_uav_list = [10,15,20]
-    n_simulations = 3
+    n_uav_list = [20]
+    n_simulations = 1
     #n_uavs = 10
     spacing = 10
         
     #%% How to package this together??       
     """begin search for incoming uavs"""
-    col_bubble = 4.5
-    weighted_h = 15
+    col_bubble = 4
+    weighted_h = 10
     
     ## begin simulation 
     for i,n_uavs in enumerate(n_uav_list):
-        for j in range(0,n_simulations+1):
+        for j in range(0,n_simulations):
             print("simulating with", n_uavs)
             
             random_coords = generate_random_uav_coordinates(
@@ -944,6 +929,7 @@ if __name__=='__main__':
             
                                                             
             success = compute_success_percent(overall_paths)
+            print("success is", success)
             some_dict = {}
             some_dict["start_list"] = start_list
             some_dict["goal_list"] = goal_list
@@ -959,18 +945,20 @@ if __name__=='__main__':
             save_object(some_dict, folder_name+pkl_file_name+'.pkl')
     
     #%% Plotting stuff
-    # from plot_situation import PlotSituation
-    # import matplotlib.pyplot as plt
+    from plot_situation import PlotSituation
+    import matplotlib.pyplot as plt
     
-    # plt.close('all')
-    # plt_situation = PlotSituation(annotated_map, obst_coords)
-    # #plt_situation.plot_inter_nodes(graph)
-    # #plt_situation.plot_config_space()
-    # #plt_situation.plot_nodes(graph)
-    # ## should include plots to show all the abstract paths 
-    # #plt_situation.plot_abstract_path(overall_paths[1], graph, 'blue')
-    # plt_situation.plot_overall_paths(abstract_paths, graph, 'black')
-    # plt_situation.plot_overall_paths(overall_paths, graph, 'blue')
+    plt.close('all')
+    plt_situation = PlotSituation(annotated_map, obst_coords)
+    # plt_situation.plot_inter_nodes(graph)
+    # plt_situation.plot_config_space()
+    
+    # plt_situation.plot_nodes(graph)
+    
+    ## should include plots to show all the abstract paths 
+    #plt_situation.plot_abstract_path(overall_paths[1], graph, 'blue')
+    plt_situation.plot_overall_paths(abstract_paths, graph, 'black')
+    plt_situation.plot_overall_paths(overall_paths, graph, 'blue')
 
     
     

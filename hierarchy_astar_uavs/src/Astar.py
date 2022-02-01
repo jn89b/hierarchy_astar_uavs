@@ -330,7 +330,7 @@ class AstarGraph():
         #setting a iter count to prevent it from running forever
         iter_count = 0
         while not self.openset.empty():
-            
+            iter_count = iter_count + 1
             #pop current node off
             cost,current_node = self.openset.get()
             
@@ -347,12 +347,13 @@ class AstarGraph():
             current_node_position = self.__unpack_tuple_coordinates(current_node.position)
             neighbors = self.graph[str(current_node_position)]
             for neighbor in neighbors:
+                
                 #check collision bubble here
-                if self.reservation_list:
-                    dist, obst_index = self.__find_closest_obstacle(self.reservation_list, neighbor.location)
-                    if self.is_collision(dist):
-                        #print("collision")
-                        continue
+                # if self.reservation_list:
+                #     dist, obst_index = self.__find_closest_obstacle(self.reservation_list, neighbor.location)
+                #     if self.is_collision(dist):
+                #         #print("collision")
+                #         continue
                 
                 if neighbor.location == current_node_position:
                     continue
@@ -389,7 +390,7 @@ class AstarLowLevel():
         self.grid_z, self.grid_x, self.grid_y = grid.shape
         self.start = start
         self.goal = goal
-        #print("starting", start, goal)
+        self.reservation_list = list(reservation_table)
         self.collision_bubble = col_bubble
         self.weight_factor = weight_factor
         self.reservation_table = reservation_table
@@ -492,23 +493,23 @@ class AstarLowLevel():
         
         return distance
     
+    
+    def get_moves(self, ss):
+        """returns all 3d moves based on a step size"""
+        bounds = list(np.arange(-ss, ss+1, 1))
+        move_list = []
+        for i in bounds:
+            for j in bounds:
+                for k in bounds:
+                    move_list.append([i,j,k])
+        
+        #remove the value that doesnt move
+        move_list.remove([0,0,0])
+        return move_list
+
     def main(self):
         ss = 1
-        move  =  [[ss, 0, 0 ], # go forward
-                  [ 0, -ss, 0], # go left
-                  [ -ss, 0 , 0], # go backward
-                  [ 0, ss, 0 ], #go right
-                  [ss, ss, 0 ], #go forward right
-                  [ss, -ss, 0], #go forward left
-                  [-ss, ss, 0 ], #go back right
-                  [-ss, -ss, 0], #go back left
-                  [ 0, ss , ss], #go up z move right 
-                  [ 0, -ss, ss], #go up z move left
-                  [ ss, ss, ss], #go up z move forward move left
-                  [ 0, -ss, ss],
-                  [ 0, 0, -ss],  
-                  ] # go down z
-        
+        move = self.get_moves(ss)
         self.init_node()
         
         count = 0 
@@ -536,6 +537,8 @@ class AstarLowLevel():
             for new_position in move:
                 
                 node_position = (current_node.position[0] + new_position[0], current_node.position[1] + new_position[1],  current_node.position[2] + new_position[2])
+                
+                
                 # Make sure within range (check if within maze boundary)
                 if self.is_move_valid(node_position) == False:
                     #print("move is invalid", node_position)
@@ -552,6 +555,7 @@ class AstarLowLevel():
                 if self.is_collision(dist):
                     #print("collision")
                     continue
+                
                 
                 if tuple(node_position) in self.reservation_table:
                     #print("its in the low level reservation table")

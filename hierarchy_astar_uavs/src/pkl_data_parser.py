@@ -33,3 +33,10 @@ if __name__=='__main__':
     
     for pkl in pkl_file_names:
         pkl_list.append(load_pkl_file(pkl))
+        
+
+    for dictionary in pkl_list:
+        print("number of uavs", len(dictionary['time_list']))
+        print("time of simulation", sum(dictionary['time_list']))
+        print(dictionary['success'])
+    
