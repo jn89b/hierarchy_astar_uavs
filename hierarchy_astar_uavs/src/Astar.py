@@ -556,7 +556,6 @@ class AstarLowLevel():
                     #print("collision")
                     continue
                 
-                
                 if tuple(node_position) in self.reservation_table:
                     #print("its in the low level reservation table")
                     continue

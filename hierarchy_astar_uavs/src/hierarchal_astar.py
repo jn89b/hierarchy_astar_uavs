@@ -657,6 +657,9 @@ def get_refine_path(graph, abstract_path, reservation_table, obstacle_coords,
     
     if isinstance(abstract_path , int):
         return [],iteration_cnt,search_cnt
+    
+    if abstract_path is None:
+        return [],iteration_cnt,search_cnt
 
     for i in range(len(abstract_path)):
         if i+1>= len(abstract_path):
@@ -669,11 +672,11 @@ def get_refine_path(graph, abstract_path, reservation_table, obstacle_coords,
             )
         
         waypoints= lowastar.main()
-        
-        #get time complexity and space complexity
-        iteration_cnt += waypoints[1]
-        search_cnt += len(waypoints[2])
-        #print("length of dictionary is", len(waypoints[2]))
+        if waypoints is not None:
+            #get time complexity and space complexity
+            iteration_cnt += waypoints[1]
+            search_cnt += len(waypoints[2])
+            #print("length of dictionary is", len(waypoints[2]))
         
         if not waypoints:
             return [],iteration_cnt,search_cnt
@@ -774,8 +777,8 @@ def begin_higher_search(random_coords, start_list, goal_list, graph, grid, obst_
                                     grid, abstract_path,reservation_table, obst_coords, 
                                     col_bubble, weighted_h)
             
-            if isinstance(abstract_path, int) == False:
-                add_to_reservation_table(abstract_path, reservation_table)
+            # if isinstance(abstract_path, int) == False:
+            #     add_to_reservation_table(abstract_path, reservation_table)
         
         end_time = timer()
         time_diff = end_time-start_time
@@ -825,7 +828,7 @@ def inflate_location(position, bounds):
     for i in bounds:
         for j in bounds:
             for k in bounds:
-                new_position = [position[0]+i, position[1]+j, position[2]+k]
+                new_position = [int(position[0]+i), int(position[1]+j), int(position[2]+k)]
                 inflated_list.append(tuple(new_position))
                 
     return inflated_list
@@ -899,7 +902,7 @@ if __name__=='__main__':
     y_bounds = [1,y_size-1]
     z_bounds = [5,z_size-1]
     
-    n_uav_list = [20]
+    n_uav_list = [80]
     n_simulations = 1
     #n_uavs = 10
     spacing = 10
@@ -957,8 +960,8 @@ if __name__=='__main__':
     
     ## should include plots to show all the abstract paths 
     #plt_situation.plot_abstract_path(overall_paths[1], graph, 'blue')
-    plt_situation.plot_overall_paths(abstract_paths, graph, 'black')
-    plt_situation.plot_overall_paths(overall_paths, graph, 'blue')
+    # plt_situation.plot_overall_paths(abstract_paths, graph, 'black')
+    # plt_situation.plot_overall_paths(overall_paths, graph, 'blue')
 
     
     
