@@ -12,6 +12,8 @@ from __future__ import print_function
 import numpy as np
 import math as m
 import random
+import os
+import pandas as pd
 
 from Astar import Astar, AstarGraph, AstarLowLevel
 import itertools
@@ -21,6 +23,7 @@ import gc
 import heapq
 import pickle
 from operator import add, sub
+from timeit import default_timer as timer
 
 class Map():
     """
@@ -649,27 +652,37 @@ def get_refine_path(graph, abstract_path, reservation_table, obstacle_coords,
                     col_bubble,weighted_h):
     """get refined path for locations -> should use a set for obst coords"""
     waypoint_coords = []
+    iteration_cnt = 0
+    search_cnt = 0
     
     if isinstance(abstract_path , int):
-        return []
-    
+        return [],iteration_cnt,search_cnt
+
     for i in range(len(abstract_path)):
         if i+1>= len(abstract_path):
-            return waypoint_coords
+            #print("final iteration", iteration_cnt)
+            return waypoint_coords, iteration_cnt, search_cnt
+        
         lowastar = AstarLowLevel(
             graph, reservation_table, obst_coords,
             abstract_path[i], abstract_path[i+1], col_bubble, weighted_h
             )
         
-        waypoints = lowastar.main()
+        waypoints= lowastar.main()
+        
+        #get time complexity and space complexity
+        iteration_cnt += waypoints[1]
+        search_cnt += len(waypoints[2])
+        #print("length of dictionary is", len(waypoints[2]))
         
         if not waypoints:
-            return []
+            return [],iteration_cnt,search_cnt
         
         if isinstance(waypoints[0], list): 
             waypoint_coords.extend(waypoints[0])
         else:
-            return waypoint_coords
+            print("final iteration", iteration_cnt)
+            return waypoint_coords, iteration_cnt, search_cnt
             
 def add_to_reservation_table(path_list, path_reservation_table):
     """add paths to reservation list"""
@@ -710,10 +723,13 @@ def generate_random_uav_coordinates(radius, x_bounds, y_bounds,  z_bounds, n_coo
 
 def begin_higher_search(random_coords, start_list, goal_list, graph, grid, obst_coords,
                         col_bubble, weighted_h):
-    """begin higher search for n uavs"""
+    """begin higher search for n uavs -> probably better to use a dataframe?"""
     reservation_table = set()
     overall_paths = []
     abstract_paths = []
+    iter_cnt_list = []
+    search_space_list = []
+    time_list = []
     
     cnt = 0
     for start, goal in zip(start_list, goal_list):
@@ -737,29 +753,96 @@ def begin_higher_search(random_coords, start_list, goal_list, graph, grid, obst_
         cluster_start = graph.determine_cluster(start)
         cluster_goal = graph.determine_cluster(goal)
         
+        
+        #time code 
+        start_time = timer()
         #check if in same region
         if cluster_start == cluster_goal:
             abstract_path = [start,goal]
-            waypoint_coords = get_refine_path(grid, abstract_path,reservation_table, obst_coords,
-                                              col_bubble, weighted_h)
+            waypoint_coords, iter_cnt, search_cnt = get_refine_path(
+                                    grid, abstract_path,reservation_table, obst_coords,
+                                    col_bubble, weighted_h)
         else:
             graph.insert_temp_nodes(start, 1, start)
             graph.insert_temp_nodes(goal, 1, goal)
             abstract_path = get_abstract_path(start, goal, reservation_table, graph)
-            waypoint_coords = get_refine_path(grid, abstract_path,reservation_table, obst_coords, 
-                                              col_bubble, weighted_h)
+            waypoint_coords,iter_cnt, search_cnt = get_refine_path(
+                                    grid, abstract_path,reservation_table, obst_coords, 
+                                    col_bubble, weighted_h)
+            
             if isinstance(abstract_path, int) == False:
                 add_to_reservation_table(abstract_path, reservation_table)
+        
+        end_time = timer()
+        time_diff = end_time-start_time
+        #print("time to find solution", time_diff)
         
         cnt+=1
         gc.collect()
         add_to_reservation_table(waypoint_coords, reservation_table)
         abstract_paths.append(abstract_path)
         overall_paths.append(waypoint_coords)
+        iter_cnt_list.append(iter_cnt)
+        search_space_list.append(search_cnt)
+        time_list.append(time_diff)
+    return reservation_table, overall_paths, abstract_paths, iter_cnt_list, search_space_list, time_list
         
+def find_total_denials(overall_paths):
+    """return total denial of paths"""
+    cnt = 0
+    for path in overall_paths:
+        if not path:
+            cnt+=1
+    
+    return cnt
+
+def compute_success_percent(overall_paths):
+    """compute overall percent success"""
+    denials = find_total_denials(overall_paths)
+    
+    return abs(len(overall_paths) - denials)/len(overall_paths)
+
+class MonteCarloLogger():
+    """
+    Name the following:
+        - file name as follows:
+            sim_#_n_drones.csv
+        - set file path as well
+        - record dictionary information as follows:
+            - n drones
+            - heuristics
+            - uav flight path based on order of control
+            - success or failure 
+    """
+    def __init__(self):# sim_num, n_drones, dict_db, performance, heuristics):
+        self.save_path = os.getcwd() + "\logs"
+        self.filename = "monte_carlo_sim"
+        self.complete_directory =  os.path.join(self.save_path, self.filename+".csv")
+
+    def convert_info_to_list(self, sim_num, n_drones, dict_db, performance, heuristics):
+        dataframe_list = []
+        for idx, (uav_id, uav) in enumerate(dict_db.items()):
+            uav.set_mission_success(performance)
+            uav.set_heuristics(heuristics)
+            uav.set_sim_num(sim_num)
+            dataframe_list.append(uav.to_dict())
         
-    return reservation_table, overall_paths, abstract_paths
+        return dataframe_list
+    
+    def write_csv(self,  sim_num, n_drones, dict_db, performance, heuristics):
+        dataframe_list = self.convert_info_to_list(sim_num, n_drones, dict_db, performance, heuristics)
+        keys = dataframe_list[0].keys()
+        filename = "simnum_"+str(sim_num)+"_drones_"+ str(n_drones)
+        complete_directory = os.path.join(self.save_path, filename+".csv")
+        with open( complete_directory, 'w', newline='') as output_file:
+            dict_writer = csv.DictWriter(output_file, keys)
+            dict_writer.writeheader()
+            dict_writer.writerows(dataframe_list)
         
+        print("recorded information to ", self.complete_directory)
+        
+    def convert_dict_df(self, info_list, column_name):
+        return pd.DataFrame(info_list, columns=[column_name])
 
 #%% Run main functions
 if __name__=='__main__':
@@ -831,71 +914,63 @@ if __name__=='__main__':
     y_bounds = [1,y_size-1]
     z_bounds = [5,z_size-1]
     
-    
-    
-    n_uavs = 500
+    n_uav_list = [10,15,20]
+    n_simulations = 3
+    #n_uavs = 10
     spacing = 10
-    
-    random_coords = generate_random_uav_coordinates(
-        spacing, x_bounds, y_bounds, z_bounds, n_uavs*2, obst_set)
-    
-    start_list = random_coords[0::2]
-    goal_list = random_coords[1::2]
-    
+        
     #%% How to package this together??       
     """begin search for incoming uavs"""
     col_bubble = 4.5
     weighted_h = 15
     
-    reservation_table, overall_paths, abstract_paths = begin_higher_search(
-                                                    random_coords,
-                                                    start_list, goal_list,
-                                                    graph, test_grid, obst_coords, 
-                                                    col_bubble, weighted_h)
-    
-    #%% 
-    """
-    what to do: 
-        simulate multiple things with monte carlo:
-            randomize location of uavs
-        save information of uav locations
-        save information of map and layouts
-        save information of flight paths
-        save information of abstract flight path
-        save reservation table
-    """
-    
-    def find_total_denials(overall_paths):
-        """return total denial of paths"""
-        cnt = 0
-        for path in overall_paths:
-            if not path:
-                cnt+=1
-        
-        return cnt
-    
-    def compute_success_percent(overall_paths):
-        """compute overall percent success"""
-        denials = find_total_denials(overall_paths)
-        
-        return abs(len(overall_paths) - denials)/len(overall_paths)
-    
-    print(compute_success_percent(overall_paths))
-    
+    ## begin simulation 
+    for i,n_uavs in enumerate(n_uav_list):
+        for j in range(0,n_simulations+1):
+            print("simulating with", n_uavs)
+            
+            random_coords = generate_random_uav_coordinates(
+                spacing, x_bounds, y_bounds, z_bounds, n_uavs*2, obst_set)
+            
+            start_list = random_coords[0::2]
+            goal_list = random_coords[1::2]
+            
+            reservation_table, overall_paths, abstract_paths, iter_list, search_list, time_list = \
+                                                            begin_higher_search(
+                                                            random_coords,
+                                                            start_list, goal_list,
+                                                            graph, test_grid, obst_coords, 
+                                                            col_bubble, weighted_h)
+            
+                                                            
+            success = compute_success_percent(overall_paths)
+            some_dict = {}
+            some_dict["start_list"] = start_list
+            some_dict["goal_list"] = goal_list
+            some_dict["overall_paths"] = overall_paths
+            some_dict["abstract_paths"] = abstract_paths
+            some_dict["iter_list"] = iter_list
+            some_dict["search_list"] = search_list
+            some_dict["time_list"] = time_list
+            some_dict["success"] = success
+            
+            folder_name = 'logs/'
+            pkl_file_name = 'sim'+str(j)+"_uavs_"+str(n_uavs)+"_coll_"+str(col_bubble)+"_heuristic"+str(weighted_h)
+            save_object(some_dict, folder_name+pkl_file_name+'.pkl')
     
     #%% Plotting stuff
-    from plot_situation import PlotSituation
-    import matplotlib.pyplot as plt
+    # from plot_situation import PlotSituation
+    # import matplotlib.pyplot as plt
     
-    plt.close('all')
-    plt_situation = PlotSituation(annotated_map, obst_coords)
-    #plt_situation.plot_inter_nodes(graph)
-    #plt_situation.plot_config_space()
-    #plt_situation.plot_nodes(graph)
-    ## should include plots to show all the abstract paths 
-    #plt_situation.plot_abstract_path(overall_paths[1], graph, 'blue')
-    plt_situation.plot_overall_paths(abstract_paths, graph, 'black')
-    plt_situation.plot_overall_paths(overall_paths, graph, 'blue')
+    # plt.close('all')
+    # plt_situation = PlotSituation(annotated_map, obst_coords)
+    # #plt_situation.plot_inter_nodes(graph)
+    # #plt_situation.plot_config_space()
+    # #plt_situation.plot_nodes(graph)
+    # ## should include plots to show all the abstract paths 
+    # #plt_situation.plot_abstract_path(overall_paths[1], graph, 'blue')
+    # plt_situation.plot_overall_paths(abstract_paths, graph, 'black')
+    # plt_situation.plot_overall_paths(overall_paths, graph, 'blue')
 
     
     

@@ -18,7 +18,7 @@ import heapq
 import numpy as np 
 import matplotlib.pyplot as plt
 import math as m
-
+from timeit import default_timer as timer
 class PreFlightPlanner():
     """Look at unique permutations for zone assignments
     and run order
@@ -329,6 +329,7 @@ def get_offset_wp(uav_path, home_base_loc):
 
 
 if __name__ == '__main__':
+    plt.close('all')
     grid_z = 50 # this is probably the z axis
     grid_x = 50 # this is x
     grid_y = 50 # this is y
@@ -353,10 +354,10 @@ if __name__ == '__main__':
     uav_0 = UAV("uav0", [19, 39, 13], 1, landing_zones[0])
     uav_1 = UAV("uav1", [0, 20, 10], 2, landing_zones[1])
     uav_2 = UAV("uav2", [13, 0, 9], 0, landing_zones[2])
-    uav_3 = UAV("uav3", [44, 0, 10], 3, landing_zones[3])          
+    #uav_3 = UAV("uav3", [44, 0, 10], 3, landing_zones[3])          
     
-    uav_list = [uav_0, uav_1, uav_2, uav_3]
-    uav_loc = [uav_0.starting_position, uav_1.starting_position, uav_2.starting_position, uav_3.starting_position]
+    uav_list = [uav_0, uav_1, uav_2] #uav_3]
+    uav_loc = [uav_0.starting_position, uav_1.starting_position, uav_2.starting_position]# uav_3.starting_position]
     #uav_list = [uav_1]
     #uav_loc = [uav_1.starting_position]
     waypoint_dict={}
@@ -367,6 +368,7 @@ if __name__ == '__main__':
     path_obst = []
     for idx, uav in enumerate(uav_list):
         print(idx)
+        start_time = timer()
         if idx == 0:
             new_obstacle = obstacle_list + return_other_zones(landing_zones[:], uav.zone_index) + return_other_uavs(uav_loc[:], idx)
         else:
@@ -374,11 +376,15 @@ if __name__ == '__main__':
             path_obst.append(uav_list[idx-1].path)
             flat_list = [item for sublist in path_obst for item in sublist]
             new_obstacle = obstacle_list + return_other_zones(landing_zones[:], uav.zone_index) + return_other_uavs(uav_loc[:], idx) + flat_list
-            
+        
         grid_copy = grid.copy()
         new_obstacle = add_obstacles(grid_copy, new_obstacle)
         astar = Astar(grid_copy, new_obstacle,  uav.starting_position, uav.goalpoint)
         uav.path = astar.main()
+        
+        end_time = timer()
+        time_diff = end_time-start_time
+        print("time to find solution", time_diff)
         #suav.offset_wp = get_offset_wp(uav.path, homebase_loc)
         waypoint_dict[uav.id] = uav.path
         #offset_waypoint_dict[uav.id] = uav.offset_wp

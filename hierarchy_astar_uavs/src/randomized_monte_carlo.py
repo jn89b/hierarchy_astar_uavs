@@ -132,6 +132,7 @@ def compute_path_length(point_list):
     path_length = np.sum(lengths)
     
     return path_length, apts
+
     
 if __name__ == '__main__':
     n_drones = 10
