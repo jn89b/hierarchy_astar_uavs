@@ -776,9 +776,6 @@ def begin_higher_search(random_coords, start_list, goal_list, graph, grid, obst_
             waypoint_coords,iter_cnt, search_cnt = get_refine_path(
                                     grid, abstract_path,reservation_table, obst_coords, 
                                     col_bubble, weighted_h)
-            
-            # if isinstance(abstract_path, int) == False:
-            #     add_to_reservation_table(abstract_path, reservation_table)
         
         end_time = timer()
         time_diff = end_time-start_time
@@ -902,7 +899,7 @@ if __name__=='__main__':
     y_bounds = [1,y_size-1]
     z_bounds = [5,z_size-1]
     
-    n_uav_list = [80]
+    n_uav_list = [120]
     n_simulations = 1
     #n_uavs = 10
     spacing = 10
