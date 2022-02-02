@@ -3,7 +3,7 @@
 Created on Wed Oct 20 16:14:14 2021
 
 @author: jn89b
-
+this is due for a refactor
 Astar 
 take in grid size
 take in collision objects 
