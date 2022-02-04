@@ -538,7 +538,6 @@ class AstarLowLevel():
                 
                 node_position = (current_node.position[0] + new_position[0], current_node.position[1] + new_position[1],  current_node.position[2] + new_position[2])
                 
-                
                 # Make sure within range (check if within maze boundary)
                 if self.is_move_valid(node_position) == False:
                     #print("move is invalid", node_position)
@@ -576,18 +575,11 @@ class AstarLowLevel():
                 """refactor this, determine if I am going up or down then 
                 adjust the heuristic"""
                 penalty = self.__compute_penalty(
-                    current_node.position[2],  child.position[2])
-                # if abs(current_node.position[2] - child.position[2]) == 1:
-                #     penalty = 1.1
-                #     #print("penalty", penalty)
-                # else:
-                #     penalty = 1       
+                    current_node.position[2],  child.position[2]) 
                 
                 """Heuristic costs calculated here, this is using eucledian distance"""
                 #print("child.position", child.position)
                 if self.is_target_close(current_node.position, self.end_node):
-                    #print("current_node", current_node.position)
-                    #print("target is close", current_node.position)
                     cost = self.compute_euclidean(current_node.position, child)
                     child.g = current_node.g + 1
                     child.h = self.compute_euclidean(child.position, self.end_node)
@@ -597,15 +589,10 @@ class AstarLowLevel():
                 else:
                     dynamic_weight = self.weight_factor
                     cost = self.compute_euclidean(current_node.position, child)
-                    #print(current_node.g)
                     child.g = current_node.g + 1
-                    #dynamic_weight = 15
                     child.h = self.compute_euclidean(child.position, self.end_node)
                     child.f = child.g + (child.h *penalty*dynamic_weight)
-                #print(child.f)
                 
-                #add to open set
-                #print("putting in", child)
                 self.openset.put((child.f, child))
                 
         

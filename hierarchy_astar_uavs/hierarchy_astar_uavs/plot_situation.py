@@ -9,6 +9,8 @@ from tracemalloc import start
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import axes3d, Axes3D 
 
+import seaborn as sns
+
 class PlotSituation():
     """
     sanity check plots
@@ -220,6 +222,86 @@ class PlotSituation():
             y_val = [y[1] for y in path_coords]
             z_val = [z[2] for z in path_coords]
             ax.plot(x_val, y_val, z_val, color=str(color))
+            
+            
+class Plotter():
+    """generic class to plot stuff as I go on this semester"""
+    def __init__(self):
+        """styles can be dark,etc"""
+        self.style = sns.set_style("darkgrid")
+        self.fontsize = 16
+    
+    def plot_basic_line(self, x_vals, y_vals, title_name,  x_label, y_label):
+        """plot axis labels"""
+        fig = plt.figure()
+        plt.plot(x_vals, y_vals)
+        
+        plt.title(title_name, fontsize=self.fontsize)
+        plt.xlabel(x_label, fontsize=self.fontsize)
+        plt.ylabel(y_label, fontsize=self.fontsize)
+        plt.tight_layout()
+        
+    def plot_multiple_lines(self, x_list, y_list, line_labels, title_name, x_label, y_label):
+        """plot multiple from x list and y list has line labels to refer to the line 
+        this assumes that you have the same x axis, which you probably should have as well
+        as the same units for comparison for your y axis"""
+        fig = plt.figure()
+        
+        for i,y_vals in enumerate(y_list):
+            plt.plot(x_list, y_vals, label=line_labels[i])
+
+        plt.title(title_name, fontsize=self.fontsize)
+        plt.xlabel(x_label, fontsize=self.fontsize)
+        plt.ylabel(y_label, fontsize=self.fontsize)
+        plt.legend()
+        plt.tight_layout()
+        
+    def plot_multiple_response(self, x_list, y_list, line_labels, title_name, x_label, y_label):
+        """plot multiple from x list and y list has line labels to refer to the line 
+        this assumes that you have the same x axis, which you probably should have as well
+        as the same units for comparison for your y axis"""
+        fig = plt.figure()
+        color_pallete = sns.color_palette("rocket", n_colors=len(y_list))
+        print("color is ", color_pallete)
+        
+        for i, (x_vals,y_vals,line_names) in enumerate(zip(x_list, y_list, line_labels)):
+            plt.plot(x_vals, y_vals, label=line_names, color = color_pallete[i])
+
+        plt.title(title_name, fontsize=self.fontsize)
+        plt.xlabel(x_label, fontsize=self.fontsize)
+        plt.ylabel(y_label, fontsize=self.fontsize)
+        plt.legend()
+        plt.tight_layout()
+        
+    def plot_subplots(self, num_subplots, num_cols, x_list, y_list):
+        """plot a bunch of subplots to the system """
+        # https://stackoverflow.com/questions/12319796/dynamically-add-create-subplots-in-matplotlib
+        # Subplots are organized in a Rows x Cols Grid
+
+        # Tot and Cols are known
+        Tot = num_subplots
+        Cols = num_cols
+
+        # Compute Rows required
+        Rows = Tot // Cols 
+        Rows += Tot % Cols
+        
+        # Create a Position index        
+        Position = range(1,Tot + 1)
+        
+        # Create main figure
+        fig = plt.figure()
+        for k in range(Tot):
+
+            # add every single subplot to the figure with a for loop
+            
+            for x_vals,y_vals in zip(x_list, y_list):
+                ax = fig.add_subplot(Rows,Cols,Position[k])
+                for x, y in zip(x_vals, y_vals):
+                    ax.plot(x, y)
+
+        plt.show()
+
         
     
 

@@ -724,6 +724,10 @@ def generate_random_uav_coordinates(radius, x_bounds, y_bounds,  z_bounds, n_coo
     return randPoints
             
 
+def insert_desired_to_set(start_list, reservation_table):
+    tuple_start_points = [tuple(start) for start in start_list]
+    reservation_table.update(tuple_start_points)
+
 def begin_higher_search(random_coords, start_list, goal_list, graph, grid, obst_coords,
                         col_bubble, weighted_h):
     """begin higher search for n uavs -> probably better to use a dataframe?"""
@@ -733,6 +737,11 @@ def begin_higher_search(random_coords, start_list, goal_list, graph, grid, obst_
     iter_cnt_list = []
     search_space_list = []
     time_list = []
+    
+    insert_desired_to_set(start_list, reservation_table)
+    insert_desired_to_set(goal_list, reservation_table)
+    #tuple_start_points = [tuple(start) for start in start_list]
+    #reservation_table.update(tuple_start_points)
     
     col_radius = col_bubble/2
     bubble_bounds = list(np.arange(-col_radius, col_radius+1, 1))
@@ -840,8 +849,8 @@ if __name__=='__main__':
     z_obs_height = 1
     num_clusters = 4
     
-    load_map = False
-    load_graph = False
+    load_map = True
+    load_graph = True
     save_information = True
     
     map_pkl_name = 'map_test.pkl'
@@ -899,7 +908,7 @@ if __name__=='__main__':
     y_bounds = [1,y_size-1]
     z_bounds = [5,z_size-1]
     
-    n_uav_list = [120]
+    n_uav_list = [60]
     n_simulations = 1
     #n_uavs = 10
     spacing = 10
@@ -911,9 +920,8 @@ if __name__=='__main__':
     
     ## begin simulation 
     for i,n_uavs in enumerate(n_uav_list):
+        print("simulating with", n_uavs)        
         for j in range(0,n_simulations):
-            print("simulating with", n_uavs)
-            
             random_coords = generate_random_uav_coordinates(
                 spacing, x_bounds, y_bounds, z_bounds, n_uavs*2, obst_set)
             
@@ -939,6 +947,9 @@ if __name__=='__main__':
             some_dict["search_list"] = search_list
             some_dict["time_list"] = time_list
             some_dict["success"] = success
+            some_dict["Heuristic"] = weighted_h
+            some_dict["Bubble"] = col_bubble
+            some_dict["Reservation Table"] = len(reservation_table)
             
             folder_name = 'logs/'
             pkl_file_name = 'sim'+str(j)+"_uavs_"+str(n_uavs)+"_coll_"+str(col_bubble)+"_heuristic"+str(weighted_h)
@@ -952,13 +963,11 @@ if __name__=='__main__':
     plt_situation = PlotSituation(annotated_map, obst_coords)
     # plt_situation.plot_inter_nodes(graph)
     # plt_situation.plot_config_space()
-    
     # plt_situation.plot_nodes(graph)
     
     ## should include plots to show all the abstract paths 
-    #plt_situation.plot_abstract_path(overall_paths[1], graph, 'blue')
-    # plt_situation.plot_overall_paths(abstract_paths, graph, 'black')
-    # plt_situation.plot_overall_paths(overall_paths, graph, 'blue')
+    plt_situation.plot_overall_paths(abstract_paths, graph, 'black')
+    plt_situation.plot_overall_paths(overall_paths, graph, 'blue')
 
     
     
