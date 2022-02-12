@@ -201,6 +201,7 @@ class Astar():
                     #print("collision")
                     continue
                 
+                
                 #create new node
                 new_node = Node(current_node, node_position)
                 
@@ -239,9 +240,7 @@ class Astar():
                     #dynamic_weight = 15
                     child.h = self.compute_euclidean(child.position, self.end_node)
                     child.f = child.g + (child.h *penalty*dynamic_weight)
-                #print(child.f)
-                
-                #add to open set
+
                 #print("putting in", child)
                 self.openset.put((child.f, child))
                 
@@ -258,7 +257,7 @@ class AstarGraph():
         self.collision_bubble = collision_bubble 
         self.openset = PriorityQueue() # priority queue
         self.closedset = {}
-        self.iter_limit = 4000 #this is stupid should be a paramter
+        self.iter_limit = 5000 #this is stupid should be a paramter
         
 
     def __init_nodes(self):
@@ -348,17 +347,13 @@ class AstarGraph():
             neighbors = self.graph[str(current_node_position)]
             for neighbor in neighbors:
                 
-                #check collision bubble here
-                # if self.reservation_list:
-                #     dist, obst_index = self.__find_closest_obstacle(self.reservation_list, neighbor.location)
-                #     if self.is_collision(dist):
-                #         #print("collision")
-                #         continue
-                
                 if neighbor.location == current_node_position:
                     continue
                 
                 if str(neighbor.location) in self.closedset:
+                    continue
+                
+                if neighbor.location[0:2] == current_node_position[0:2]:
                     continue
                 
                 if tuple(neighbor.location) in self.reservation_table:
@@ -399,10 +394,12 @@ class AstarLowLevel():
         self.openset = PriorityQueue() # priority queue
         self.closedset = {}
 
-        if self.start[2] - self.goal[2] <= 0: 
+        if self.start[2] - self.goal[2] < 0: 
             self._determine_penalty = "going down"
         else:
             self._determine_penalty = "going up"
+        # else:
+        #     self._determine_penalty = "level"
         
 
     def is_collision(self,distance):
@@ -460,6 +457,8 @@ class AstarLowLevel():
             return 1.15
         if self._determine_penalty == "going up" and diff_z < 0:
             return 1.15
+        # if self._determine_penalty =="level":
+        #     return 1
             
         return 1.0
         
@@ -518,7 +517,7 @@ class AstarLowLevel():
             count = count + 1
             
             if count >= 5000:
-                #print("iterations too much for low level")
+                print("iterations too much for low level")
                 return None, count, self.closedset 
             
             #pop node off from priority queue and add into closedset

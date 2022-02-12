@@ -346,9 +346,9 @@ class Graph():
             return 1E100
             
     def compute_actual_euclidean(self, position, goal):
-        distance =  (((position[0] - position[0]) ** 2) + 
-                           ((position[1] - position[1]) ** 2) +
-                           ((position[2] - position[2]) ** 2))**(1/2)
+        distance =  (((position[0] - goal[0]) ** 2) + 
+                           ((position[1] - goal[1]) ** 2) +
+                           ((position[2] - goal[2]) ** 2))**(1/2)
         
         return distance
         
@@ -637,9 +637,8 @@ def build_map(num_obstacles, x_size, y_size, z_size, z_obs_height, num_clusters,
     return annotated_map
 
 def get_abstract_path(start_location, goal_location, reservation_table,graph):
-    """plans abstract uav abstract path and returns abstract path home
-    Improvements if can't find abstract path then I should look at another solution?
-    how would that work?? easiest way is to  tell it to standby probably return a continue
+    """plans abstract path based on start location, goal location and what is reservered
+    returns the abstract path as a list
     """
     graph.insert_temp_nodes(start_location, 1, start_location)
     graph.insert_temp_nodes(goal_location, 1, goal_location)
@@ -738,42 +737,54 @@ def begin_higher_search(random_coords, start_list, goal_list, graph, grid, obst_
     search_space_list = []
     time_list = []
     
-    insert_desired_to_set(start_list, reservation_table)
-    insert_desired_to_set(goal_list, reservation_table)
-    #tuple_start_points = [tuple(start) for start in start_list]
-    #reservation_table.update(tuple_start_points)
-    
     col_radius = col_bubble/2
     bubble_bounds = list(np.arange(-col_radius, col_radius+1, 1))
+    
+    insert_desired_to_set(start_list, reservation_table)
+    insert_inflated_waypoints(start_list, bubble_bounds, reservation_table)
+    
+    insert_desired_to_set(goal_list, reservation_table)
+    insert_inflated_waypoints(goal_list, bubble_bounds, reservation_table)
     
     cnt = 0
     for start, goal in zip(start_list, goal_list):
         
-        #randomize operations to define z location
-        ops = (add,sub)
-        op = random.choice(ops) 
-        goal[2] = op(start[2], random.choice((1,40)))
+        # #randomize operations to define z location
+        # ops = (add,sub)
+        # op = random.choice(ops) 
+        # goal[2] = op(start[2], random.choice((1,40)))
         
-        #check to make sure z is not ouf bounds 
-        if goal[2] > z_bounds[1]:
-            goal[2] = z_bounds[1]-1
-        if goal[2] < 0:
-            goal[2] = 2
+        # #check to make sure z is not ouf bounds 
+        # if goal[2] > z_bounds[1]:
+        #     goal[2] = z_bounds[1]-1
+        # if goal[2] < 0:
+        #     goal[2] = 2
             
-        #print("start and goal",cnt,  start, goal)
-        if cnt % 20 == 0:
-            """sanity check to make sure its printing"""
-            print("start and goal",cnt,  start, goal)
+        # #print("start and goal",cnt,  start, goal)
+        # if cnt % 20 == 0:
+        #     """sanity check to make sure its printing"""
+        #     print("start and goal",cnt,  start, goal)
             
         #determine regions of coordinates on the cluster
         cluster_start = graph.determine_cluster(start)
         cluster_goal = graph.determine_cluster(goal)
         
+        #remove the values from the reservation table for now
+        # if tuple(start) in reservation_table:
+        reservation_table.remove(tuple(start))
+        start_bubble = inflate_location(start, bubble_bounds)
+        remove_inflate_waypoints(start_bubble, bubble_bounds, reservation_table)
+        
+        # if tuple(goal) in reservation_table:
+        reservation_table.remove(tuple(goal))
+        goal_bubble = inflate_location(goal, bubble_bounds)
+        remove_inflate_waypoints(goal_bubble, bubble_bounds, reservation_table)
         
         #time code 
         start_time = timer()
         #check if in same region
         if cluster_start == cluster_goal:
+            print("same region")
             abstract_path = [start,goal]
             waypoint_coords, iter_cnt, search_cnt = get_refine_path(
                                     grid, abstract_path,reservation_table, obst_coords,
@@ -838,6 +849,21 @@ def inflate_location(position, bounds):
                 inflated_list.append(tuple(new_position))
                 
     return inflated_list
+
+def remove_inflate_waypoints(waypoint_list,bounds, reservation_table):
+    """remove inflated waypoints from reservation table"""
+    for waypoint in waypoint_list:
+        if waypoint in reservation_table:
+            reservation_table.remove(waypoint)
+
+def save_image(image_name, fig):
+    """saves image"""
+    image_format = 'svg' # e.g .png, .svg, etc.
+    # image_name = 'myimage.svfg'
+    
+    fig.savefig('images/'+image_name+'.svg', format=image_format, dpi=1200)
+    
+    
 #%% Run main functions
 if __name__=='__main__':
     
@@ -849,8 +875,8 @@ if __name__=='__main__':
     z_obs_height = 1
     num_clusters = 4
     
-    load_map = True
-    load_graph = True
+    load_map = False
+    load_graph = False
     save_information = True
     
     map_pkl_name = 'map_test.pkl'
@@ -908,15 +934,44 @@ if __name__=='__main__':
     y_bounds = [1,y_size-1]
     z_bounds = [5,z_size-1]
     
-    n_uav_list = [60]
-    n_simulations = 1
+    n_uav_list = [40]
+    n_simulations = 3
     #n_uavs = 10
     spacing = 10
+    
+    def compute_actual_euclidean(position, goal):
+        distance =  (((position[0] - goal[0]) ** 2) + 
+                           ((position[1] - goal[1]) ** 2) +
+                           ((position[2] - goal[2]) ** 2))**(1/2)
+        
+        return distance
+    
+    def prioritize_uas(start_list, goal_list):
+        """Takes in start list, and goal list and 
+        prioritizes UAS based on highest distance to be traversed"""
+        
+        dist_list = []
+        for i, (start,goal) in enumerate(zip(start_list,goal_list)):
+            dist_val = compute_actual_euclidean(start,goal)
+            dist_list.append((dist_val, start, goal))
+        
+        ##setting reverse to false sets to min first, true max first
+        final_list = sorted(dist_list, key=lambda x: x[0], reverse=True)
+        sorted_start = [start[1] for i, start in enumerate(final_list)]
+        sorted_goal = [goal[2] for i, goal in enumerate(final_list)]
+    
+        return final_list, sorted_start, sorted_goal
         
     #%% How to package this together??       
     """begin search for incoming uavs"""
-    col_bubble = 4
+    col_bubble = 5
     weighted_h = 10
+    
+    # start_list = [[10,10,20], [75,20,35],[85,25,20]]
+    # goal_list = [[45,45,20], [10,49,20], [49,49,20]]
+    
+    # start_list = [[85,25,20],]
+    # goal_list = [[49,49,20]]
     
     ## begin simulation 
     for i,n_uavs in enumerate(n_uav_list):
@@ -927,6 +982,7 @@ if __name__=='__main__':
             
             start_list = random_coords[0::2]
             goal_list = random_coords[1::2]
+            info_list, start_list, goal_list = prioritize_uas(start_list, goal_list)
             
             reservation_table, overall_paths, abstract_paths, iter_list, search_list, time_list = \
                                                             begin_higher_search(
@@ -959,15 +1015,22 @@ if __name__=='__main__':
     from plot_situation import PlotSituation
     import matplotlib.pyplot as plt
     
+        
     plt.close('all')
     plt_situation = PlotSituation(annotated_map, obst_coords)
-    # plt_situation.plot_inter_nodes(graph)
-    # plt_situation.plot_config_space()
+    plt_situation.plot_inter_nodes(graph)
+    plt_situation.plot_config_space()
     # plt_situation.plot_nodes(graph)
     
-    ## should include plots to show all the abstract paths 
-    plt_situation.plot_overall_paths(abstract_paths, graph, 'black')
+    # should include plots to show all the abstract paths 
+    #plt_situation.plot_overall_paths(abstract_paths, graph, 'black')
     plt_situation.plot_overall_paths(overall_paths, graph, 'blue')
+
+    """
+    Need to improve code, during the abstraction section, go to only one corridor don't take up the others
+    """
+    
+    #%% Testing a sorting mechanism to priortize UAS with longer distance traveled
 
     
     

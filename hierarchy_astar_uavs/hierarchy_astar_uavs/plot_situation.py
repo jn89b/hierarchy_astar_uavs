@@ -11,6 +11,13 @@ from mpl_toolkits.mplot3d import axes3d, Axes3D
 
 import seaborn as sns
 
+def save_image(image_name, fig):
+    """saves image"""
+    image_format = 'svg' # e.g .png, .svg, etc.
+    # image_name = 'myimage.svfg'
+    
+    fig.savefig('images/'+image_name+'.svg', format=image_format, dpi=1200)
+
 class PlotSituation():
     """
     sanity check plots
@@ -68,6 +75,7 @@ class PlotSituation():
         ax.legend()
         plt.grid()
         plt.show()
+        save_image('Regions', fig)
         
     def __extract_keys(self, node_keys):
         node_locations = []
@@ -152,22 +160,34 @@ class PlotSituation():
         z_val = [z[2] for z in coordinates]
         ax.plot(x_val, y_val, z_val, color=color_list[0])
 
-    def plot_inter_nodes(self,graph):
-        fig, ax  = self.__set_axis()
-        node_dict = graph.graph
-        node_keys = node_dict.keys()
-        node_locations = self.__extract_keys(node_keys)
-
-        for node_key, node_list in node_dict.items():
-            node_coords = []
-            inter_lines = []
-            for node in node_list:
-                node_coords.append(node.location)
-                if node.node_type == "INTER":
-                    node_marker = "x"
-                    inter_lines.append(node.location)
-                    ax.plot(node.location[0], node.location[1], node.location[2],
-                                    marker=node_marker, color=self.color_map[str(node.cluster_coord)])
+    def plot_inter_nodes(self,graph, fig=None, ax=None):
+        if fig == None and ax == None:
+            fig, ax  = self.__set_axis()
+        
+        else:
+            node_dict = graph.graph
+            node_keys = node_dict.keys()
+            node_locations = self.__extract_keys(node_keys)
+    
+            for node_key, node_list in node_dict.items():
+                node_coords = []
+                inter_lines = []
+                for node in node_list:
+                    node_coords.append(node.location)
+                    if node.node_type == "INTER":
+                        node_marker = "x"
+                        inter_lines.append(node.location)
+                        ax.plot(node.location[0], node.location[1], node.location[2],
+                                        marker=node_marker, color=self.color_map[str(node.cluster_coord)])
+                        
+                    
+        save_image('Inter Nodes', fig)
+        # def save_image(image_name, fig):
+        #     """saves image"""
+        #     image_format = 'svg' # e.g .png, .svg, etc.
+        #     # image_name = 'myimage.svfg'
+            
+        #     fig.savefig('images/'+image_name+'.svg', format=image_format, dpi=1200)
    
     def plot_abstract_path(self, path_list, graph, color):
         """plots the abstract from the waypoints assigned
@@ -192,8 +212,7 @@ class PlotSituation():
         y_val = [y[1] for y in path_coords]
         z_val = [z[2] for z in path_coords]
         ax.plot(x_val, y_val, z_val, color=str(color))
-        
-                
+        save_image('Abstract Path', fig)
    
     def plot_overall_paths(self, overall_path, graph, color):
         """plots the abstract from the waypoints assigned
@@ -202,8 +221,9 @@ class PlotSituation():
 
         #self.plot_inter_nodes(graph, ax)
         self.__plot_static_obstacles(ax)
+        #self.plot_inter_nodes(graph, fig=fig, ax=ax)
+        
         #plot start and stop points
-
         for path_list in overall_path:
             path_coords = []
             if isinstance(path_list, int):
@@ -222,6 +242,8 @@ class PlotSituation():
             y_val = [y[1] for y in path_coords]
             z_val = [z[2] for z in path_coords]
             ax.plot(x_val, y_val, z_val, color=str(color))
+            
+        save_image('Abstract Path', fig)
             
             
 class Plotter():
@@ -288,7 +310,7 @@ class Plotter():
         
         # Create a Position index        
         Position = range(1,Tot + 1)
-        
+    
         # Create main figure
         fig = plt.figure()
         for k in range(Tot):
