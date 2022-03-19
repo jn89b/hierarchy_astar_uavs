@@ -38,13 +38,25 @@ class PlotSituation():
         
     def __set_axis(self):
         fig = plt.figure()
-        ax = Axes3D(fig)
+        ax = plt.axes(projection="3d")
         #add offsets
-        ax.set_xlim([-1, self.grid_size[0]+1])
-        ax.set_ylim([-1, self.grid_size[1]+1])
-        ax.set_zlim([-1,  self.grid_size[2]+1])
+        ax.set_xlim([-1,100])
+        ax.set_ylim([-1,100])
+        ax.set_zlim([0,50])
+        # ax.set_xlim([-1, self.grid_size[0]+1])
+        # ax.set_ylim([-1, self.grid_size[1]+1])
+        # ax.set_zlim([-1,  self.grid_size[2]+1])
         return fig,ax
     
+    
+    def __set_2d_axis(self):
+        fig = plt.figure()
+        ax = plt.axes()
+        ax.set_xlim([-1,100])
+        ax.set_ylim([-1,100])
+        
+        return fig,ax
+        
     def __plot_static_obstacles(self, ax):
         for obstacle in self.obstacle_list:
             #obstacle_z_list = obstacle.z_list
@@ -55,7 +67,7 @@ class PlotSituation():
         """just plotting the configuration space"""
         fig, ax = self.__set_axis()
         
-        self.__plot_static_obstacles(ax)                
+        #self.__plot_static_obstacles(ax)                
 
         #lets plot regions in here too
         color_list = ['g', 'c', 'm', 'b']
@@ -72,7 +84,7 @@ class PlotSituation():
                     #ax.scatter(x_val, y_val, z_val, color=color_list[i], marker='x')
                     
         #xticks = np.arange(0,self.grid[0])
-        ax.legend()
+        #ax.legend()
         plt.grid()
         plt.show()
         save_image('Regions', fig)
@@ -84,6 +96,11 @@ class PlotSituation():
             
         return node_locations
             
+    def plot_reservation(self,reservation_table):
+        fig, ax = self.__set_axis()
+        for val in reservation_table:
+            ax.scatter3D(val[0], val[1], val[2])
+    
     def plot_nodes(self, graph):
         """plot connection nodes"""
         fig, ax  = self.__set_axis()
@@ -114,13 +131,13 @@ class PlotSituation():
                     ax.plot(node.location[0], node.location[1], node.location[2],
                                   marker=node_marker, color=color_map[str(node.cluster_coord)])
                         
-                x_val = [x[0] for x in node_coords]
-                y_val = [y[1] for y in node_coords]
-                z_val = [z[2] for z in node_coords]
-                ax.plot(x_val, y_val, z_val, color=color_map[str(node.cluster_coord)])
+                # x_val = [x[0] for x in node_coords]
+                # y_val = [y[1] for y in node_coords]
+                # z_val = [z[2] for z in node_coords]
+                # ax.plot(x_val, y_val, z_val, color=color_map[str(node.cluster_coord)])
                 #ax.plot(x_val, y_val, z_val, color=color_list[0])
                 
-        ax.set_xlabel("x position")
+       # ax.set_xlabel("x position")
         
     def plot_start_end(self, graph, start_position):
         fig, ax  = self.__set_axis()
@@ -189,7 +206,7 @@ class PlotSituation():
             
         #     fig.savefig('images/'+image_name+'.svg', format=image_format, dpi=1200)
    
-    def plot_abstract_path(self, path_list, graph, color):
+    def plot_abstract_path(self, path_list, graph, color, filename):
         """plots the abstract from the waypoints assigned
         show the regions and entryways I have to go through"""
         fig ,ax = self.__set_axis()
@@ -212,22 +229,34 @@ class PlotSituation():
         y_val = [y[1] for y in path_coords]
         z_val = [z[2] for z in path_coords]
         ax.plot(x_val, y_val, z_val, color=str(color))
-        save_image('Abstract Path', fig)
+        save_image(filename, fig)
    
-    def plot_overall_paths(self, overall_path, graph, color):
+    def plot_overall_paths(self, overall_path, graph, color,filename, uav_key=None):
         """plots the abstract from the waypoints assigned
         show the regions and entryways I have to go through"""
         fig ,ax = self.__set_axis()
-
+            
         #self.plot_inter_nodes(graph, ax)
-        self.__plot_static_obstacles(ax)
+        # self.__plot_static_obstacles(ax)
         #self.plot_inter_nodes(graph, fig=fig, ax=ax)
+        cluster_dict = self.grid.cluster_dict
+        
+
+        
+        #lets plot regions in here too
+        line_styles = ['-', '--', '-.', ':']
+
+        if uav_key !=None:
+            color_list = uav_key
+        else:
+            color_list = ['g', 'c', 'm', 'b']
         
         #plot start and stop points
-        for path_list in overall_path:
+        for i,path_list in enumerate(overall_path):
             path_coords = []
             if isinstance(path_list, int):
                 continue
+            
             for path in path_list:
 
                 start_end_size = 50
@@ -238,13 +267,147 @@ class PlotSituation():
                 ax.scatter3D(end_points[0], end_points[1], end_points[2], color="green", marker='^',
                             s=start_end_size)
                 path_coords.append(path)
+            
+            
             x_val = [x[0] for x in path_coords]
             y_val = [y[1] for y in path_coords]
             z_val = [z[2] for z in path_coords]
-            ax.plot(x_val, y_val, z_val, color=str(color))
+            ax.plot(x_val, y_val, z_val, color=color_list[i],fillstyle='none')
             
-        save_image('Abstract Path', fig)
+        
+        node_dict = graph.graph
+        node_keys = node_dict.keys()
+        node_locations = self.__extract_keys(node_keys)
+        
+        #lets plot regions in here too
+        color_list = ['g', 'c', 'm', 'b']
+        line_styles = ['-', '--', '-.', ':']
+        cluster_dict = self.grid.cluster_dict
+        color_map = {str([0,0]): color_list[0],
+                     str([0,1]): color_list[1],
+                     str([1,0]): color_list[2],
+                     str([1,1]): color_list[3]
+            }
+
+
+        # for node_key, node_list in node_dict.items():
+        #     node_coords = []
+        #     inter_lines = []
+        #     for node in node_list:
+        #         node_coords.append(node.location)
+        #         if node.node_type == "INTER":
+        #             node_marker = "x"
+        #             inter_lines.append(node.location)
+        #             ax.plot(node.location[0], node.location[1], node.location[2],
+        #                           marker=node_marker, color=color_map[str(node.cluster_coord)])                     
+        save_image(filename, fig)
             
+    def plot_2d_paths(self, overall_path, graph, color,filename, uav_key=None):
+        """"""
+        fig,ax = self.__set_2d_axis()
+
+        #self.plot_inter_nodes(graph, ax)
+        # self.__plot_static_obstacles(ax)
+        #self.plot_inter_nodes(graph, fig=fig, ax=ax)
+        cluster_dict = self.grid.cluster_dict
+        
+        #lets plot regions in here too
+        line_styles = ['-', '--', '-.', ':']
+
+        if uav_key !=None:
+            color_list = uav_key
+        else:
+            color_list = ['g', 'c', 'm', 'b']
+        
+        #plot start and stop points
+        for i,path_list in enumerate(overall_path):
+            path_coords = []
+            if isinstance(path_list, int):
+                continue
+            
+            for path in path_list:
+
+                start_end_size = 50
+                start_points = path_list[0]
+                end_points = path_list[-1]
+                ax.scatter(start_points[0], start_points[1], color=color_list[i], marker='o',
+                            s=start_end_size)
+                ax.scatter(end_points[0], end_points[1], color=color_list[i], marker='^',
+                            s=start_end_size)
+                path_coords.append(path)
+            
+            
+            x_val = [x[0] for x in path_coords]
+            y_val = [y[1] for y in path_coords]
+            ax.plot(x_val, y_val, color=color_list[i],marker='o',fillstyle='none')
+
+            
+            plt.xticks(fontsize=16)
+            plt.yticks(fontsize=16)
+        
+    def plot_start_goal(self, overall_path, graph, color,filename):
+        """plots the abstract from the waypoints assigned
+        show the regions and entryways I have to go through"""
+        fig ,ax = self.__set_axis()
+
+        #self.plot_inter_nodes(graph, ax)
+        # self.__plot_static_obstacles(ax)
+        #self.plot_inter_nodes(graph, fig=fig, ax=ax)
+        cluster_dict = self.grid.cluster_dict
+        
+        #lets plot regions in here too
+        color_list = ['g', 'c', 'm', 'b']
+        line_styles = ['-', '--', '-.', ':']
+        
+        
+        #plot start and stop points
+        for path_list in overall_path:
+            path_coords = []
+            if isinstance(path_list, int):
+                continue
+            
+            for path in path_list:
+
+                start_end_size = 50 
+                start_points = path_list[0]
+                end_points = path_list[-1]
+                ax.scatter3D(start_points[0], start_points[1], start_points[2], color="cyan", marker='o',
+                            s=start_end_size)
+                ax.scatter3D(end_points[0], end_points[1], end_points[2], color="green", marker='^',
+                            s=start_end_size)
+                path_coords.append(path)
+            x_val = [x[0] for x in path_coords]
+            y_val = [y[1] for y in path_coords]
+            z_val = [z[2] for z in path_coords]
+            ax.plot(x_val, y_val, z_val, color=str(color), fillstyle='none')
+            
+        
+        node_dict = graph.graph
+        node_keys = node_dict.keys()
+        node_locations = self.__extract_keys(node_keys)
+        
+        #lets plot regions in here too
+        color_list = ['g', 'c', 'm', 'b']
+        line_styles = ['-', '--', '-.', ':']
+        cluster_dict = self.grid.cluster_dict
+        color_map = {str([0,0]): color_list[0],
+                     str([0,1]): color_list[1],
+                     str([1,0]): color_list[2],
+                     str([1,1]): color_list[3]
+            }
+
+
+        for node_key, node_list in node_dict.items():
+            node_coords = []
+            inter_lines = []
+            for node in node_list:
+                node_coords.append(node.location)
+                if node.node_type == "INTER":
+                    node_marker = "x"
+                    inter_lines.append(node.location)
+                    ax.plot(node.location[0], node.location[1], node.location[2],
+                                  marker=node_marker, color=color_map[str(node.cluster_coord)])                     
+        save_image(filename, fig)
             
 class Plotter():
     """generic class to plot stuff as I go on this semester"""

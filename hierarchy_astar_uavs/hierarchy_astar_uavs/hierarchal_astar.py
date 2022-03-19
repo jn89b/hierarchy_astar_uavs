@@ -723,11 +723,29 @@ def generate_random_uav_coordinates(radius, x_bounds, y_bounds,  z_bounds, n_coo
     return randPoints
             
 
-def insert_desired_to_set(start_list, reservation_table):
-    tuple_start_points = [tuple(start) for start in start_list]
-    reservation_table.update(tuple_start_points)
+def insert_desired_to_set(some_list, reservation_table):
+    tuple_values = [tuple(values) for values in some_list]
+    reservation_table.update(tuple_values)
 
-def begin_higher_search(random_coords, start_list, goal_list, graph, grid, obst_coords,
+def check_waypoints_correct(waypoints, goal_point):
+    """
+    checks if final waypoint matches with the goal point
+    has a built in try catch to see if waypoints is empty or not
+    """
+    #waypoints = waypoint_array.tolist()
+    
+    try:        
+        if waypoints[-1] == tuple(goal_point):
+            return True
+        else:
+            #print("not correct", waypoints[-1], goal_point)
+            return False
+        
+    except IndexError:
+        #print("no waypoints", waypoints)
+        return False
+
+def begin_higher_search(random_coords, sorted_start, sorted_goal, graph, grid, obst_coords,
                         col_bubble, weighted_h):
     """begin higher search for n uavs -> probably better to use a dataframe?"""
     reservation_table = set()
@@ -740,14 +758,14 @@ def begin_higher_search(random_coords, start_list, goal_list, graph, grid, obst_
     col_radius = col_bubble/2
     bubble_bounds = list(np.arange(-col_radius, col_radius+1, 1))
     
-    insert_desired_to_set(start_list, reservation_table)
-    insert_inflated_waypoints(start_list, bubble_bounds, reservation_table)
+    insert_desired_to_set(sorted_start, reservation_table)
+    insert_inflated_waypoints(sorted_start, bubble_bounds, reservation_table)
     
-    insert_desired_to_set(goal_list, reservation_table)
-    insert_inflated_waypoints(goal_list, bubble_bounds, reservation_table)
+    insert_desired_to_set(sorted_goal, reservation_table)
+    insert_inflated_waypoints(sorted_goal, bubble_bounds, reservation_table)
     
     cnt = 0
-    for start, goal in zip(start_list, goal_list):
+    for start, goal in zip(sorted_start, sorted_goal):
         
         # #randomize operations to define z location
         # ops = (add,sub)
@@ -770,21 +788,21 @@ def begin_higher_search(random_coords, start_list, goal_list, graph, grid, obst_
         cluster_goal = graph.determine_cluster(goal)
         
         #remove the values from the reservation table for now
-        # if tuple(start) in reservation_table:
-        reservation_table.remove(tuple(start))
-        start_bubble = inflate_location(start, bubble_bounds)
-        remove_inflate_waypoints(start_bubble, bubble_bounds, reservation_table)
-        
-        # if tuple(goal) in reservation_table:
-        reservation_table.remove(tuple(goal))
-        goal_bubble = inflate_location(goal, bubble_bounds)
-        remove_inflate_waypoints(goal_bubble, bubble_bounds, reservation_table)
+        if tuple(start) in reservation_table:
+            reservation_table.remove(   tuple(start))
+            start_bubble = inflate_location(start, bubble_bounds)
+            remove_inflate_waypoints(start_bubble, bubble_bounds, reservation_table)
+            
+        if tuple(goal) in reservation_table:
+            reservation_table.remove(tuple(goal))
+            goal_bubble = inflate_location(goal, bubble_bounds)
+            remove_inflate_waypoints(goal_bubble, bubble_bounds, reservation_table)
         
         #time code 
         start_time = timer()
         #check if in same region
         if cluster_start == cluster_goal:
-            print("same region")
+            #print("same region")
             abstract_path = [start,goal]
             waypoint_coords, iter_cnt, search_cnt = get_refine_path(
                                     grid, abstract_path,reservation_table, obst_coords,
@@ -800,6 +818,10 @@ def begin_higher_search(random_coords, start_list, goal_list, graph, grid, obst_
         end_time = timer()
         time_diff = end_time-start_time
         #print("time to find solution", time_diff)
+    
+        if check_waypoints_correct(waypoint_coords, goal) == False:
+            #print("no waypoints can be found")
+            waypoint_coords = []
         
         cnt+=1
         gc.collect()
@@ -835,7 +857,11 @@ def compute_success_percent(overall_paths):
 def insert_inflated_waypoints(waypoint_list,bounds, reservation_table):
     """insert inflated waypoints"""
     for waypoint in waypoint_list:
+        #print("waypoint is", waypoint)
         inflated_list = inflate_location(waypoint, bounds)
+        #print("\n")
+        #print(inflated_list)
+        #print("\n")
         reservation_table.update(inflated_list)
         
 def inflate_location(position, bounds):
@@ -847,7 +873,10 @@ def inflate_location(position, bounds):
             for k in bounds:
                 new_position = [int(position[0]+i), int(position[1]+j), int(position[2]+k)]
                 inflated_list.append(tuple(new_position))
-                
+    
+    #inserting my own location into reservation list as well
+    inflated_list.append(tuple(position))
+    
     return inflated_list
 
 def remove_inflate_waypoints(waypoint_list,bounds, reservation_table):
@@ -934,8 +963,8 @@ if __name__=='__main__':
     y_bounds = [1,y_size-1]
     z_bounds = [5,z_size-1]
     
-    n_uav_list = [40]
-    n_simulations = 3
+    n_uav_list = [1]
+    n_simulations = 1
     #n_uavs = 10
     spacing = 10
     
@@ -946,17 +975,17 @@ if __name__=='__main__':
         
         return distance
     
-    def prioritize_uas(start_list, goal_list):
+    def prioritize_uas(starting_list, goal_list):
         """Takes in start list, and goal list and 
         prioritizes UAS based on highest distance to be traversed"""
         
         dist_list = []
-        for i, (start,goal) in enumerate(zip(start_list,goal_list)):
+        for i, (start,goal) in enumerate(zip(starting_list,goal_list)):
             dist_val = compute_actual_euclidean(start,goal)
             dist_list.append((dist_val, start, goal))
         
         ##setting reverse to false sets to min first, true max first
-        final_list = sorted(dist_list, key=lambda x: x[0], reverse=True)
+        final_list = sorted(dist_list, key=lambda x: x[0], reverse=False)
         sorted_start = [start[1] for i, start in enumerate(final_list)]
         sorted_goal = [goal[2] for i, goal in enumerate(final_list)]
     
@@ -964,39 +993,53 @@ if __name__=='__main__':
         
     #%% How to package this together??       
     """begin search for incoming uavs"""
-    col_bubble = 5
+    col_bubble = 4
     weighted_h = 10
-    
-    # start_list = [[10,10,20], [75,20,35],[85,25,20]]
-    # goal_list = [[45,45,20], [10,49,20], [49,49,20]]
-    
-    # start_list = [[85,25,20],]
-    # goal_list = [[49,49,20]]
     
     ## begin simulation 
     for i,n_uavs in enumerate(n_uav_list):
         print("simulating with", n_uavs)        
         for j in range(0,n_simulations):
+            gc.collect()
             random_coords = generate_random_uav_coordinates(
                 spacing, x_bounds, y_bounds, z_bounds, n_uavs*2, obst_set)
             
             start_list = random_coords[0::2]
             goal_list = random_coords[1::2]
-            info_list, start_list, goal_list = prioritize_uas(start_list, goal_list)
+            
+            # start_list = [[65,10,35]]
+            # goal_list=[[20,75,27]]
+            # start_list = [[0,0,30], [0,10,35],[0,15,26], [0,20,30]]
+            # goal_list = [[65,70,35], [75,65,32], [80,65,30], [70,80,33]]
+            
+            start_list = [[0,0,0], [0,10,15],[15,0,15],
+                          [20,0,15], [5,0,15], [0,95,20],
+                          [0,99,15], [75,0,0], [95,95,30],
+                          [95,91,25]]
+            
+            goal_list = [[65,70,25], [75,65,30], [80,65,35],
+                         [90,80,20], [85,75,30], [65,85,25],
+                         [80,95,30], [85,15,30], [15,85,25],
+                         [30,35,15]]
+            #goal_list = [[30,40,20], [45,35,30], [50,35,35], [60,50,20]]
+            
+            info_list, sorted_start, sorted_goal= prioritize_uas(start_list, goal_list)
+            # sorted_start = start_list 
+            # sorted_goal = goal_list
             
             reservation_table, overall_paths, abstract_paths, iter_list, search_list, time_list = \
                                                             begin_higher_search(
                                                             random_coords,
-                                                            start_list, goal_list,
+                                                            sorted_start, sorted_goal,
                                                             graph, test_grid, obst_coords, 
                                                             col_bubble, weighted_h)
             
-                                                            
+                                                                        
             success = compute_success_percent(overall_paths)
             print("success is", success)
             some_dict = {}
-            some_dict["start_list"] = start_list
-            some_dict["goal_list"] = goal_list
+            some_dict["start_list"] = sorted_start
+            some_dict["goal_list"] = sorted_goal
             some_dict["overall_paths"] = overall_paths
             some_dict["abstract_paths"] = abstract_paths
             some_dict["iter_list"] = iter_list
@@ -1015,16 +1058,40 @@ if __name__=='__main__':
     from plot_situation import PlotSituation
     import matplotlib.pyplot as plt
     
-        
+    # uav_key = []
+    # for paths in overall_paths:
+    #     if paths[0] == tuple([0,0,30]):
+    #          uav_key.append('m')
+    #     if paths[0] == tuple([0,10,35]):
+    #         uav_key.append('c')
+    #     if paths[0] == tuple([0,15,26]):
+    #         uav_key.append('b')
+    #     if paths[0] == tuple([0,20,30]):
+    #         uav_key.append('g')
+
+    uav_colors = ['tab:pink','tab:orange','g','b',
+               'r', 'c', 'k', 'tab:gray', 'y', '#aa6c39']
+    
+    uav_key = []
+    #append colors based on what uav it was tab:pink
+    for i,original_start in enumerate(sorted_start):
+        print(original_start)
+        for j, start in enumerate(start_list):
+            if start == original_start:
+                uav_key.append(uav_colors[j])
+        #if start goal is equal to index of start 
+    
     plt.close('all')
     plt_situation = PlotSituation(annotated_map, obst_coords)
-    plt_situation.plot_inter_nodes(graph)
-    plt_situation.plot_config_space()
+    # plt_situation.plot_inter_nodes(graph)
+    # plt_situation.plot_config_space()
     # plt_situation.plot_nodes(graph)
     
-    # should include plots to show all the abstract paths 
-    #plt_situation.plot_overall_paths(abstract_paths, graph, 'black')
-    plt_situation.plot_overall_paths(overall_paths, graph, 'blue')
+    # ## should include plots to show all the abstract paths 
+    #plt_situation.plot_overall_paths(abstract_paths, graph, 'black','Abstract Path', uav_key)
+    #plt_situation.plot_overall_paths(overall_paths, graph, 'blue', 'Actual Path',uav_key)
+    plt_situation.plot_2d_paths(overall_paths, graph, 'blue', '2d path',uav_key)
+    #plt_situation.plot_reservation(reservation_table)
 
     """
     Need to improve code, during the abstraction section, go to only one corridor don't take up the others
